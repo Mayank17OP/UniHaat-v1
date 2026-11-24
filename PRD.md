@@ -299,7 +299,8 @@ Supporting: listings/week, demand match rate, median time-to-sell, wishlist→bu
 ## 15. Acceptance Criteria (v1 Prototype)
 
 All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`,
-`tests/oauth.spec.js` and `tests/counters.spec.js` (36 tests, all passing). See §16 for the
+`tests/oauth.spec.js`, `tests/counters.spec.js` and `tests/profile-privacy.spec.js`
+(40 tests, all passing). See §16 for the
 verification record.
 
 - [x] Browse/search/filter/sort 14 realistic listings; wishlist persists across reload.
@@ -322,6 +323,14 @@ verification record.
       local state when signed out or offline.
 - [x] **Row Level Security** is enabled on every table and verified to block anonymous reads
       of private data and anonymous writes.
+- [x] **A profile's private columns are not readable by a client** — `email`, `student_id`
+      and `role` are granted to nobody on the client side, the app asks for named columns
+      instead of `*`, and the verification RPC clears them from the row it returns.
+- [x] **The server-side functions are not callable by a client** — the trigger helpers and
+      the staff tools are closed to `PUBLIC`, `anon` and `authenticated`; only the
+      verification RPC and the three policy helpers stay reachable.
+- [x] **A rating aggregate is a function of the review rows** — it is rebuilt on insert,
+      edit and removal, so it cannot drift.
 - [x] **A student cannot rewrite their own reputation** — `verified`, `role` and the rating
       aggregates are server-owned columns; only the fields a student owns are writable.
 - [x] **A student cannot mint their own reputation** — a SafeSwap handover completes only
@@ -365,7 +374,7 @@ Plus a `impact_summary` view aggregating the UniImpact counters.
 | `on_listing_published` | Runs UniMatch for the listing against every open demand. |
 | `on_demand_created` | Re-scores open demands against existing inventory. |
 | `on_transaction_completed` | Marks the listing `sold`, increments both students' deal counts, reuse and savings. |
-| `on_review_created` | Updates the seller's rating aggregate; rejects reviews without a completed transaction. |
+| `on_review_created` | Rebuilds the reviewed student's rating aggregate from the review rows, on insert, edit and removal alike; rejects a review without a completed transaction. |
 | `set_updated_at` | Maintains `updated_at` on profiles, listings and conversations. |
 
 `refresh_demand_matches()` scores candidates on **keyword relevance first**, then budget and
@@ -378,7 +387,8 @@ permanently excluded from every later scan — a better listing published afterw
 never surface on a demand board that already had one hit.
 
 ### Security model
-RLS is enabled on all 13 tables with 36 policies. Verified against the live database:
+RLS is enabled on all 13 tables with 36 policies, and every table now forces it. Verified
+against the live database:
 an anonymous role can read only public reference data, active listings and open demands; it
 sees **0** wishlist, message and transaction rows; and an insert of a listing is rejected with
 *new row violates row-level security policy*. Private tables are reachable only through
@@ -444,8 +454,69 @@ lifecycle.
 **Review scores.** The rating and the parties are what the aggregate was computed from, so
 they are fixed once a review exists; only `body` and `condition_match` remain editable.
 
+The aggregate itself is now **rebuilt from the rows** rather than added to. The old trigger
+only ran after an insert and only ever did `rating_sum + rating` / `rating_count + 1`, so
+editing or removing a review left the profile's rating wrong for good — the count would
+keep a review that no longer existed, and the sum would keep its rating. The new trigger
+fires on insert, update *and* delete and recomputes both figures from the review rows
+themselves, which is idempotent: running it twice gives the same answer as running it
+once, and it repairs any drift instead of accumulating it.
+
+The visible consequence is that a student's rating is now exactly the average of the
+reviews they have received. The two seeded demo students were carrying a hand-written
+`24 / 5` with no reviews behind it, so their totals are now `0 / 0` and the seller card
+falls back to its "no rating yet" value — the same fallback the app already used for a
+student who had not been reviewed.
+
 **Privileges no client role needs.** `TRUNCATE` is not covered by row-level security, so it
 is revoked from `anon` and `authenticated` along with `TRIGGER` and `REFERENCES`.
+
+### Least privilege (`0008_least_privilege_and_review_aggregates.sql`)
+
+A full privilege audit of the live database turned up four more doors that the earlier
+migrations had left open. All four were reproduced before the fix.
+
+**The whole profile was public.** The `SELECT` grant on `profiles` covered all twenty
+columns, so an anonymous caller could read `email` and `student_id` — two pieces of
+personal information — for *every* student on the platform, without signing in. The read
+is now granted column by column: the marketplace keeps the fields it renders (`full_name`,
+`avatar_url`, `college_id`, `department`, `year_of_study`, `bio`, `verified`, the
+reputation counters and the timestamps), while `email`, `student_id` and `role` stay on the
+server. `role` in particular is what `is_staff()` reads, so leaking it told a caller who
+to impersonate.
+
+A column grant only holds if the client asks for named columns — `select=*` would ask for
+the private ones too and the server would reject the whole query. The app now names the
+fields it renders (`src/supabase.js`), and `tests/profile-privacy.spec.js` fails if a
+wildcard or a private column ever creeps back into the request.
+
+**Every function was callable by the client.** PostgreSQL grants `EXECUTE` on a new
+function to `PUBLIC` by default, and all fourteen functions in `public` carried it. That
+included the trigger helpers and the staff tools, and in particular
+`refresh_demand_matches()` — a `SECURITY DEFINER` function that rewrites the match table
+and could be called straight from the network with no authentication at all. The
+server-side functions are now closed to `PUBLIC`, `anon` and `authenticated`, and the
+service role keeps them. Three helpers have to stay open, because a row policy is
+evaluated with the caller's rights: `is_staff()`, `is_conversation_participant()` and
+`is_transaction_party()`. `claim_student_verification()` — the one function the app
+calls — stays callable by a signed-in student only, and it now clears the private
+columns from the profile row it returns.
+
+**The aggregate view read the tables it should not have.** `impact_summary` aggregated
+over `transactions` as its owner, so it published the whole platform's turnover to
+anonymous callers while the transaction table itself stayed locked to the two students
+involved in each deal. The client grants are revoked, and the view now runs with the
+caller's rights, so the policies of the tables underneath it apply to it too. The
+frontend never used it.
+
+**Anonymous visitors could attempt writes.** `anon` held `INSERT`, `UPDATE` and `DELETE`
+on eleven tables. Every one of those writes was already blocked by a row policy, but a
+mistake in a policy would have turned into a write. The privileges are revoked, so an
+anonymous visitor can now look at the marketplace and nothing else.
+
+Finally, every table now **forces** row level security. The owner is `postgres`, which
+carries the `BYPASSRLS` attribute, so the server-side functions, the trigger helpers and
+the admin key are unaffected — this only removes the table owner's inherited exemption.
 
 ### Auth configuration
 Email/password enabled, `mailer_autoconfirm` on for demo friction, site URL and redirect
@@ -463,9 +534,10 @@ made every returning sign-in show it again.
 ## 16. Build Record (this prototype)
 
 ### Stack
-Zero-framework vanilla HTML/CSS/JS (ES modules) + Supabase + Playwright. No build step, no
-bundler. Rationale: the prototype should be readable and editable in a browser, and runnable
-with a single static server.
+Zero-framework vanilla HTML/CSS/JS (ES modules) + Supabase + Playwright. No bundler — the app
+runs straight from the source, and `scripts/build.mjs` only copies it into `dist/` for the
+deployment. Rationale: the prototype should be readable and editable in a browser, and
+runnable with a single static server.
 
 ```
 index.html          App shell — all sections, modals, drawer, auth modal, profile menu
@@ -481,6 +553,7 @@ assets/*.svg        14 product illustrations, generated by scripts/make-assets.m
 assets/fonts/*.woff2  Self-hosted Fraunces / Inter / JetBrains Mono
 vendor/supabase.js  Vendored Supabase browser client (no CDN request)
 supabase/migrations/  SQL migrations, applied to the live project
+supabase/tests/      Database-level security regression suite (psql)
 scripts/make-assets.mjs      Regenerates the illustrations
 scripts/make-fonts.mjs       Re-copies font files out of node_modules
 scripts/vendor-supabase.mjs  Re-vendors the Supabase browser client
@@ -508,7 +581,7 @@ Supabase project without the key ever being written into the source. The publish
 public by design — Row Level Security is what actually protects the data — and the
 service-role key never leaves the server.
 
-The backend is the Supabase project above. Migrations `0001`–`0007` are applied to it.
+The backend is the Supabase project above. Migrations `0001`–`0008` are applied to it.
 
 ### Implementation notes
 - **SmartPrice v1** is a transparent rule-based model — category depreciation curve × condition
@@ -543,6 +616,17 @@ The backend is the Supabase project above. Migrations `0001`–`0007` are applie
   (`./src/main.js?v=<hash>`) *and* onto every relative import inside the module graph,
   so a new build can never be shadowed by a cached one. The same fix was applied to
   `rollNumber()` in `src/alive.js`, which had the identical flaw.
+
+- **The privilege surface is the product's trust boundary.** A full audit of the live
+  database — every table grant, every column grant, every function's `EXECUTE`, every
+  policy — found that the row policies were doing all the work on their own. The grants
+  underneath them were wide open: an anonymous caller could read every student's `email`
+  and `student_id`, could call `refresh_demand_matches()` to rewrite the match table
+  without signing in, and could read a view that published the platform's turnover
+  through the transaction policy it was supposed to sit behind. RLS says *which rows* a
+  role may touch; the grants say *which columns and which functions* it may touch at
+  all, and both have to be narrow. `supabase/tests/security_regression.sql` is the
+  regression suite for that surface.
 
 ### The motion layer (`src/alive.js`)
 Motion is treated as a response to input rather than decoration. Every primitive animates
