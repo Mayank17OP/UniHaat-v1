@@ -629,3 +629,29 @@ input[type=range]{accent-color:var(--accent);width:100%}
   .reserve-vector-row .fine{grid-column:1 / -1}
   .reserve-type p{min-height:0}
 }
+
+/* ============================================================================
+   Location discovery — the nearby bar, the permission prompt and the
+   manual picker. The chip sits above the grid so the location is always
+   visible and always changeable; the modals reuse the overlay pattern.
+   ========================================================================== */
+
+.location-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 2px 0}
+.location-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:9px 16px;font-weight:700;font-size:13px;color:var(--ink);transition:transform .18s var(--ease-spring),border-color .2s,background .2s}
+.location-chip:hover{border-color:var(--ink);transform:translateY(-1px)}
+.location-chip:active{transform:scale(.97)}
+.location-chip.set{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+.location-chip.set svg{color:var(--green)}
+.location-bar .fine{margin:0}
+.location-actions{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+#locationForm label{display:block;font-size:13px;font-weight:700;margin:14px 0 4px}
+#locationForm select{width:100%;border:1px solid var(--line-2);border-radius:10px;padding:11px 12px;background:var(--paper);margin-top:4px}
+#locationForm .auth-error{margin-top:12px}
+#locationForm .btn-block{margin-top:14px}
+#locationForm .location-actions .btn-block{margin-top:0}
+
+/* The distance chip on a card: how far this listing is from the student */
+.dist-chip{position:absolute;bottom:10px;left:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:800;font-family:var(--font-m);color:var(--ink);z-index:1}
+.dist-chip svg{flex-shrink:0}
+.dist-chip.near{background:var(--green);border-color:var(--green);color:#fff}
+.card-meta .dist{font-weight:700;color:var(--ink)}

@@ -30,6 +30,10 @@ export function listingFromRow(row) {
     condition: row.condition,
     ageMonths: row.age_months,
     distance: Number(row.distance_km ?? 0.5),
+    // Coordinates, when the listing has them. Without them there is no
+    // honest distance to measure, and discovery sorts the listing last.
+    lat: row.lat != null ? Number(row.lat) : null,
+    lng: row.lng != null ? Number(row.lng) : null,
     college: seller.colleges?.short_name ?? "Campus",
     scope: "same",
     seller: seller.full_name ?? "Student",
@@ -104,6 +108,69 @@ export async function syncDemands() {
   }
 }
 
+/**
+ * Pull the listings nearest to a point, nearest first.
+ *
+ * The server orders them; the browser measures the distance it shows
+ * from the coordinates the rows carry. Falls back to the full catalogue
+ * (sorted client-side) when the nearby query is unavailable, so a
+ * network failure degrades to the old behaviour rather than an empty
+ * marketplace.
+ */
+export async function syncNearbyListings(location, { radiusKm = null, limit = 50 } = {}) {
+  if (!location) return null;
+  try {
+    const rows = await SB.fetchNearbyListings({
+      lat: location.lat,
+      lng: location.lng,
+      radiusKm,
+      limit,
+    });
+    if (!rows) return null;
+    return rows.map(listingFromRow);
+  } catch (err) {
+    console.warn("[UniHaat] nearby listing sync failed", err?.message);
+    return null;
+  }
+}
+
+/** The signed-in student's saved location, or null. */
+export async function syncMyLocation() {
+  if (!SB.isSignedIn()) return null;
+  try {
+    return await SB.getMyLocation();
+  } catch (err) {
+    console.warn("[UniHaat] saved location sync failed", err?.message);
+    return null;
+  }
+}
+
+/** Persist the student's location to their profile (best-effort). */
+export async function persistMyLocation(location) {
+  if (!SB.isSignedIn() || !location) return null;
+  try {
+    return await SB.saveMyLocation({
+      lat: location.lat,
+      lng: location.lng,
+      label: location.label || location.short || null,
+    });
+  } catch (err) {
+    console.warn("[UniHaat] could not save location:", err?.message);
+    return null;
+  }
+}
+
+/** Clear the saved location from the profile (best-effort). */
+export async function persistClearLocation() {
+  if (!SB.isSignedIn()) return null;
+  try {
+    return await SB.clearMyLocation();
+  } catch (err) {
+    console.warn("[UniHaat] could not clear location:", err?.message);
+    return null;
+  }
+}
+
 /** Persist a newly published listing (and its image) to Supabase. */
 export async function publishListing(listing) {
   if (!SB.isSignedIn()) return null;
@@ -123,6 +190,10 @@ export async function publishListing(listing) {
       repair_history: listing.repairs,
       college_id: profile?.college_id ?? null,
       distance_km: listing.distance,
+      // Where the listing is picked up from. The seller's known location
+      // at publish time, when there is one; the college gate otherwise.
+      lat: listing.lat ?? null,
+      lng: listing.lng ?? null,
       campus_area: profile?.colleges?.short_name ?? null,
       seller_attested: true,
       status: "active",
