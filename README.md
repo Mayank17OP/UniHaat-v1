@@ -97,6 +97,12 @@ open the account and the app explains why.
 - **Demand Board + UniMatch** — post a demand, get matches with reasons. Irrelevant
   category-only matches are rejected.
 - **Hostel Clearance**, **SafeSwap** (canvas QR → scan → complete), **in-app chat**.
+- **UniReserve** — reserve campus cycles, calculators, study tables, hostel gear and
+  instruments. The Banker's Algorithm runs on the server, so a request is approved,
+  held in a queue, or blocked because it would leave the campus unable to finish
+  what it has already promised. The dashboard shows the available vector, the
+  allocation, the safe sequence and a log of every decision, and the four worked
+  examples of the algorithm run live.
 - **Auth** — sign in / sign up with email + password, Google sign-in, profile menu, and a
   session that survives a reload. Listings, wishlist and demands persist to Postgres.
 - **UniImpact** — animated counters and progress bars.
@@ -148,7 +154,14 @@ lookalike domain (`notdtu.ac.in`) is nobody's, a college address does reach the 
 the campus follows the address (including a campus sub-domain), the app asks the server
 which addresses it accepts, and a Google account that is not a college account is told why.
 
-That is 51 tests in total.
+9 tests in `tests/unireserve.spec.js` cover UniReserve: the section and its tagline,
+the dashboard's six counters, a safe reservation being approved with its allocation
+shown, a request beyond the free pool being held rather than approved, a finished
+reservation giving its resources back, the safe sequence being shown and changing after
+an allocation, the four worked examples running, the reservation log recording the
+decision, and the catalogue listing every rentable kind of thing.
+
+That is 60 tests in total.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.
@@ -169,6 +182,37 @@ write the student id, the campus or the verified flag), and then walks a handove
 opening to completion and verifies that a student's rating aggregate is rebuilt from the
 review rows — after an insert, after an edit and after a removal. It runs inside a
 transaction that is rolled back at the end, so it never leaves anything behind.
+
+### Database suites (`npm run test:db`)
+
+The database suites are in the repository, and one command runs all of them:
+
+```bash
+npm run test:db          # a local PostgreSQL on 127.0.0.1:55432
+DATABASE_URL=postgres://... npm run test:db
+```
+
+It prepares a fresh database — the GoTrue stand-in, every migration, the demo data —
+and then runs each suite:
+
+| Suite | What it checks |
+| --- | --- |
+| `supabase/tests/security_regression.sql` | The privilege surface, the admission rule, the evidence rule, and the review aggregate |
+| `supabase/tests/unireserve_regression.sql` | The UniReserve vectors, approval, hold, block, safety, safe sequence, release, the queue, ownership isolation, the grants and the four demonstrations |
+| `supabase/tests/unireserve_backend.test.mjs` | 70 checks that drive the real functions over real data, including concurrent requests that must not over-allocate |
+
+`supabase/tests/local_harness.sql` stands in for Supabase. It matters that it
+reproduces the way Supabase hands the `public` schema to the client roles — every
+table, sequence and function goes to `anon`, `authenticated` and `service_role` by
+default, and the migrations take back whatever a client must not have. A local
+database that started with fewer privileges would let a migration pass that would
+fail in production; that is how the first draft of `0012` was found to let a client
+write the reservation tables and let an anonymous caller run the allocator's
+internal functions.
+
+`scripts/run-sql-suite.mjs` runs a psql-style suite without needing psql, so the
+same file runs in CI, in a container or on a laptop. The suites use `:'name'`
+variables and `\gset`, and the runner understands exactly that much.
 
 ## Deployment
 
