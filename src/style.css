@@ -96,6 +96,26 @@ section[id],main [id]{scroll-margin-top:92px}
 .mobile-actions{display:flex;gap:10px;padding-top:14px;margin-top:6px;border-top:1px solid var(--line-2)}
 .mobile-actions .btn{flex:1}
 .sell-short{display:none}
+/* Sign-in CTA: text on desktop, icon on small screens.
+   The responsive overrides for these live in the nav media queries further
+   down the file — media queries add no specificity, so a base rule placed
+   after them would silently win. */
+.auth-cta-icon{display:none}
+.auth-cta .auth-cta-text{display:inline}
+
+/* Buttons — Emil press physics */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:11px 20px;font-weight:700;font-size:14px;border:1px solid transparent;text-decoration:none;white-space:nowrap;flex-shrink:0;transition:transform .18s var(--ease-spring),background .2s,box-shadow .2s;will-change:transform}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--ink);color:#FFF9F0}
+.btn-primary:hover{background:var(--accent-dark);transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn-ghost{background:#fff;border-color:var(--line-2);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
+.btn-block{width:100%}
+
+/* ---- Responsive nav ---------------------------------------------------
+   These live below the base rules on purpose: media queries carry no
+   specificity of their own, so an override that appears earlier in the
+   sheet would lose to a plain class rule declared later. */
 @media(max-width:1480px){.logo-tag{display:none}}
 @media(max-width:1320px){.nav-links{display:none}.hamburger{display:flex}}
 @media(max-width:640px){
@@ -109,7 +129,7 @@ section[id],main [id]{scroll-margin-top:92px}
   /* Sign in collapses to a person icon so the row never overflows */
   .auth-cta .auth-cta-text{display:none}
   .auth-cta{width:42px;height:42px;padding:0;border-radius:50%}
-  .auth-cta-icon{display:block}
+  .auth-cta-icon{display:block;flex-shrink:0}
 }
 @media(max-width:400px){
   .logo-word{font-size:19px}
@@ -125,27 +145,21 @@ section[id],main [id]{scroll-margin-top:92px}
   .nav-actions{gap:5px}
 }
 
-/* Buttons — Emil press physics */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:11px 20px;font-weight:700;font-size:14px;border:1px solid transparent;text-decoration:none;white-space:nowrap;flex-shrink:0;transition:transform .18s var(--ease-spring),background .2s,box-shadow .2s;will-change:transform}
-.btn:active{transform:scale(.97)}
-.btn-primary{background:var(--ink);color:#FFF9F0}
-.btn-primary:hover{background:var(--accent-dark);transform:translateY(-1px);box-shadow:var(--shadow)}
-.btn-ghost{background:#fff;border-color:var(--line-2);color:var(--ink)}
-.btn-ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
-.btn-block{width:100%}
-
 /* Hero */
 .hero{padding:56px 0 40px;overflow:hidden}
 .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+/* Grid items default to min-width:auto, so a wide descendant (the stats row)
+   can push the track past the viewport. Let the track shrink and wrap instead. */
+.hero-grid > *{min-width:0}
 .hero h1 .accent{color:var(--accent)}
-.hero-search{display:flex;gap:10px;margin:28px 0 12px;background:#fff;border:1px solid var(--line-2);border-radius:999px;padding:6px;box-shadow:var(--shadow);max-width:560px}
+.hero-search{display:flex;gap:10px;margin:28px 0 12px;background:#fff;border:1px solid var(--line-2);border-radius:999px;padding:6px;box-shadow:var(--shadow);max-width:560px;width:100%}
 .hero-search input{flex:1;border:0;background:none;padding:10px 14px;font-size:16px;min-width:0}
 .hero-search input:focus{outline:none}
 .hero-quick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--ink-2)}
 .hero-quick button{background:#fff;border:1px solid var(--line-2);border-radius:999px;padding:6px 12px;font-weight:600;transition:transform .18s var(--ease-spring),border-color .2s}
 .hero-quick button:hover{border-color:var(--ink);transform:translateY(-1px)}
 .hero-quick button:active{transform:scale(.95)}
-.hero-stats{display:flex;gap:36px;margin:36px 0 0;padding:0}
+.hero-stats{display:flex;flex-wrap:wrap;gap:24px 36px;margin:36px 0 0;padding:0}
 .hero-stats dt{font-family:var(--font-m);font-size:26px;font-weight:700}
 .hero-stats dd{margin:2px 0 0;font-size:13px;color:var(--ink-2)}
 .hero-visual{position:relative;min-height:480px}
@@ -428,10 +442,6 @@ input[type=range]{accent-color:var(--accent);width:100%}
 /* Scroll progress */
 .scroll-progress{position:fixed;top:0;left:0;right:0;height:3px;z-index:120;pointer-events:none}
 .scroll-progress i{display:block;height:100%;background:var(--accent);transform:scaleX(0);transform-origin:left center}
-
-/* Sign-in CTA: text on desktop, icon on small screens */
-.auth-cta-icon{display:none}
-.auth-cta .auth-cta-text{display:inline}
 
 /* Connection status pill */
 .sync-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:5px 11px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap;transition:color .3s,border-color .3s,background .3s}

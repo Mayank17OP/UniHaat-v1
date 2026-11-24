@@ -151,6 +151,47 @@ test("no horizontal overflow on mobile", async ({ page }) => {
   }
 });
 
+test("interactive controls stay inside the viewport", async ({ page }) => {
+  // A clipped control still reports a full scrollWidth when an ancestor
+  // hides the overflow, so check the controls themselves.
+  for (const width of [320, 390, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(BASE);
+    await page.waitForTimeout(600);
+    const clipped = await page.evaluate((vw) => {
+      const ids = ["signInBtn", "menuBtn", "wishlistBtn", "sellBtn", "heroQ"];
+      const bad = [];
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el || el.hidden) continue;
+        const b = el.getBoundingClientRect();
+        if (b.width === 0) continue;
+        if (b.right > vw + 1 || b.left < -1) bad.push(`${id} ${Math.round(b.left)}→${Math.round(b.right)}`);
+      }
+      // The hero search button lives inside the form
+      const sb = document.querySelector(".hero-search button")?.getBoundingClientRect();
+      if (sb && (sb.right > vw + 1 || sb.left < -1)) bad.push(`searchBtn ${Math.round(sb.left)}→${Math.round(sb.right)}`);
+      return bad;
+    }, width);
+    expect(clipped, `clipped controls at ${width}px`).toEqual([]);
+  }
+});
+
+test("the sign-in CTA collapses to an icon on small screens", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(BASE);
+  const cta = page.locator("#signInBtn");
+  await expect(cta).toBeVisible();
+  // The label is gone, the person icon is shown and actually has width
+  await expect(page.locator(".auth-cta-text")).toBeHidden();
+  await expect(page.locator(".auth-cta-icon")).toBeVisible();
+  const iconW = await page.evaluate(() => document.querySelector(".auth-cta-icon").getBoundingClientRect().width);
+  expect(iconW).toBeGreaterThan(10);
+  // It is still reachable — clicking it opens the auth modal
+  await cta.click();
+  await expect(page.locator("#authOverlay")).toBeVisible();
+});
+
 test("mobile menu opens and triggers sell flow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(BASE);
