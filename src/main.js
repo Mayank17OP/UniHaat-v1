@@ -615,5 +615,27 @@ initAuthUI({
     } else if (event === "SIGNED_OUT") {
       toast("Signed out");
     }
+    // The button follows the server. While the student is signed in, the
+    // database is the only thing that knows whether they are verified, so
+    // the local flag must not pretend otherwise.
+    syncVerifyButton();
   },
 });
+
+/**
+ * Keep the verify button honest.
+ *
+ * Signed in, the answer is the server's. Signed out, there is no account
+ * to ask, so the local flag stands.
+ */
+function syncVerifyButton() {
+  const btn = $("#verifyBtn");
+  if (!btn) return;
+  const profile = getProfileData();
+  if (SB.isSignedIn()) {
+    verified = Boolean(profile?.verified);
+    btn.textContent = verified ? "✓ Verified" : "Verify as a student";
+  } else if (verified) {
+    btn.textContent = "✓ Verified";
+  }
+}
