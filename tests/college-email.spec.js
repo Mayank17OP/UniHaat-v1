@@ -47,8 +47,9 @@ const colleges = [
 /**
  * Mock the auth and REST layers, recording what the app asked for.
  * @param {import('@playwright/test').Page} page
+ * @param {{token?: "fail" | "ok", colleges?: object[]}} [options]
  */
-async function mockSupabase(page) {
+async function mockSupabase(page, { token = "fail", colleges: list = colleges } = {}) {
   const calls = { signup: null, token: null, colleges: null };
 
   await page.route("**/*", async (route) => {
@@ -74,6 +75,18 @@ async function mockSupabase(page) {
     }
     if (p === "/auth/v1/token") {
       calls.token = { url: url.search, body: route.request().postData() };
+      if (token === "ok") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            access_token: "test-token",
+            token_type: "bearer",
+            expires_in: 3600,
+            user: { id: "signed-in-student", email: "aarav.sharma@dtu.ac.in" },
+          }),
+        });
+      }
       return route.fulfill({
         status: 400,
         contentType: "application/json",
@@ -88,7 +101,7 @@ async function mockSupabase(page) {
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(colleges),
+        body: JSON.stringify(list),
       });
     }
     if (p.startsWith("/rest/v1/")) {
@@ -128,7 +141,7 @@ test("the sign-up form refuses a personal address and never puts it on the wire"
   expect(calls.signup, "no sign-up request was made").toBeNull();
 });
 
-test("the sign-in form refuses a personal address", async ({ page }) => {
+test("the sign-in form explains the college rule when the server refuses", async ({ page }) => {
   const calls = await mockSupabase(page);
   await openAuth(page, "signin");
 
@@ -139,7 +152,62 @@ test("the sign-in form refuses a personal address", async ({ page }) => {
   const error = page.locator("#authError");
   await expect(error).toBeVisible();
   await expect(error).toContainText(/college/i);
-  expect(calls.token, "no sign-in request was made").toBeNull();
+  // The server had the last word: only the server knows whether the
+  // account exists, so the request is made and the answer is the
+  // server's. The college rule is what the app adds on top of it.
+  expect(calls.token, "the sign-in request was made").toBeTruthy();
+});
+
+test("sign-in is decided by the server, not by the browser's college list", async ({ page }) => {
+  // The browser's copy of the college list is only a hint: it is a copy,
+  // it can be behind the database, and a campus added there yesterday
+  // would be missing from it. The server knows whether the account
+  // exists, so it is the server that decides.
+  const calls = await mockSupabase(page, { token: "ok" });
+  await openAuth(page, "signin");
+
+  // A campus the browser has never heard of — the live list the mock
+  // returns does not carry it, and the seed copy does not either.
+  await page.fill("#authForm [name=email]", "student@delhitechnicalcampus.ac.in");
+  await page.fill("#authForm [name=password]", "campus-life-1");
+  await page.click("#authSubmit");
+
+  await page.waitForTimeout(600);
+  expect(calls.token, "the sign-in request was made").toBeTruthy();
+  expect(calls.token.body || calls.token.url).toContain("delhitechnicalcampus.ac.in");
+});
+
+test("a campus that is only in the database is offered and accepted", async ({ page }) => {
+  // The list is data: a college is added by giving the table a row. The
+  // browser has to offer it and accept its addresses without a redeploy.
+  const calls = await mockSupabase(page, {
+    colleges: [
+      ...colleges,
+      {
+        id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        short_name: "DTC",
+        name: "Delhi Technical Campus",
+        email_domain: "delhitechnicalcampus.ac.in",
+      },
+    ],
+  });
+  await openAuth(page, "signup");
+
+  // The picker carries it.
+  await expect(page.locator("#authCollege option[value=DTC]")).toHaveCount(1);
+
+  // And the address names it, so the student does not have to choose.
+  await page.fill("#authForm [name=email]", "student@delhitechnicalcampus.ac.in");
+  await expect(page.locator("#authCollege")).toHaveValue("DTC");
+
+  // And the sign-up reaches the server.
+  await page.fill("#authForm [name=fullName]", "Aarav Sharma");
+  await page.fill("#authForm [name=password]", "campus-life-1");
+  await page.click("#authSubmit");
+
+  await page.waitForTimeout(600);
+  expect(calls.signup, "the sign-up request was made").toBeTruthy();
+  expect(calls.signup.body || calls.signup.url).toContain("delhitechnicalcampus.ac.in");
 });
 
 test("a lookalike domain is nobody's", async ({ page }) => {
@@ -194,7 +262,7 @@ test("the app asks the server which addresses it accepts", async ({ page }) => {
   expect(calls.colleges.select).toContain("email_domain");
 });
 
-test("a Google account that is not a college account is told why", async ({ page }) => {
+test("a refused Google account is told why, without blaming the student", async ({ page }) => {
   await mockSupabase(page);
   // The server refuses to open the account, so the round trip comes back
   // with its error in the address bar.
@@ -204,4 +272,7 @@ test("a Google account that is not a college account is told why", async ({ page
   const error = page.locator("#authError");
   await expect(error).toBeVisible();
   await expect(error).toContainText(/college/i);
+  // A campus that is missing from our list is our gap, not the
+  // student's fault, and the message has to say so.
+  await expect(error).toContainText(/tell us/i);
 });

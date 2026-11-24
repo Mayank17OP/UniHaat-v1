@@ -14,6 +14,7 @@ export const COLLEGES = [
   { short: "Amity", label: "Amity University", domain: "amity.edu" },
   { short: "IPU", label: "Indraprastha University", domain: "ipu.ac.in" },
   { short: "NSUT", label: "Netaji Subhas University of Technology", domain: "nsut.ac.in" },
+  { short: "DTC", label: "Delhi Technical Campus", domain: "delhitechnicalcampus.ac.in" },
 ];
 
 export const CATEGORIES = [
