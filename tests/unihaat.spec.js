@@ -312,6 +312,34 @@ test("Supabase row mapping produces valid UI models", async ({ page }) => {
   expect(listing.live).toBe(true);
 });
 
+test("a seller with no reviews gets no star rating", async ({ page }) => {
+  await page.goto(BASE);
+  const listing = await page.evaluate(async () => {
+    const { listingFromRow } = await import("./src/persistence.js");
+    return listingFromRow({
+      id: "aaaa1111-0000-0000-0000-000000000009",
+      title: "A Brand New Listing",
+      listing_type: "sell",
+      category_slug: "furniture",
+      price: "500.00",
+      original_price: "1000.00",
+      condition: "Like new",
+      age_months: 1,
+      distance_km: "0.10",
+      profiles: {
+        id: "11111111-1111-1111-1111-111111111111",
+        full_name: "Aarav Sharma",
+        rating_sum: 0, rating_count: 0, deals_completed: 0, verified: true,
+        colleges: { short_name: "DTU" },
+      },
+    });
+  });
+  // Nobody has reviewed this seller, so there is no score to print. The
+  // old mapping wrote "5.0" here, which claimed a perfect score nobody
+  // had given.
+  expect(listing.rating).toBeNull();
+});
+
 test("Supabase demand row mapping carries UniMatch reasons", async ({ page }) => {
   await page.goto(BASE);
   const demand = await page.evaluate(async () => {
@@ -342,7 +370,8 @@ test("student verification unlocks selling", async ({ page }) => {
   await page.goto(BASE);
   await page.click("#verifyBtn");
   await expect(page.locator("#verifyOverlay")).toBeVisible();
-  await page.fill("#verifyForm [name=email]", "aarav@dtu.ac.in");
+  // The address is read off the account, so it is not typed into.
+  await expect(page.locator("#verifyForm [name=email]")).toHaveAttribute("readonly", "");
   await page.selectOption("#verifyForm [name=college]", { index: 1 });
   await page.fill("#verifyForm [name=studentId]", "DTU/2K23/042");
   await page.click("#verifyForm button[type='submit']");

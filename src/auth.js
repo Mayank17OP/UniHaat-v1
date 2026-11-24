@@ -3,10 +3,11 @@
 
 import {
   initAuth, signUp, signIn, signInWithGoogle, signOut,
-  getUser, getSession, getProfile, updateProfile, fetchColleges,
+  getUser, getSession, getProfile, fetchColleges,
   getMode, isSignedIn, onAuthChange,
 } from "./supabase.js";
 import { COLLEGES } from "./data.js";
+import { collegeForEmail, collegeEmailRequiredMessage, isCollegeEmail } from "./college-email.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -46,6 +47,10 @@ function describeOAuthError(code, raw) {
     return "That sign-in was blocked. Check the redirect URI in your Google OAuth settings.";
   if (c.includes("session_not_found") || c.includes("invalid_code"))
     return "That sign-in link has expired. Try Google sign-in again.";
+  // The server refuses to open an account that is not on a college address.
+  // It says so as a database error, so the wording is checked for.
+  if (/college|database error/i.test(String(raw || "")))
+    return "That Google account isn't a college account. UniHaat only takes college email addresses — sign in with your college Google account.";
   if (c.includes("server_error") || c.includes("temporarily_unavailable"))
     return "Google had a problem signing you in. Try again in a moment.";
   return raw ? `Google sign-in failed: ${raw}` : "Google sign-in failed. Try again.";
@@ -83,43 +88,33 @@ function initials(name) {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
 
-/* ------------------------------------------------------------ college picker */
-
-const COLLEGE_PROMPTED = "uh-college-prompted";
+/* ------------------------------------------------------------ college campus */
 
 /**
- * Google sign-up has no college step, so a Google student's profile is born
- * without one and campus-only discovery silently does nothing. Offer the
- * picker once, right after they land.
+ * The campus a student belongs to.
+ *
+ * The address decides it — the database reads the college off the domain
+ * when the account is created and keeps it there — so the picker is no
+ * longer a choice. It shows what the address says, and it says why it
+ * cannot be changed from here.
  */
-function maybeAskForCollege() {
-  if (!isSignedIn()) return;
-  if (profile?.college_id) return;
-  if (localStorage.getItem(COLLEGE_PROMPTED) === "1") return;
-  localStorage.setItem(COLLEGE_PROMPTED, "1");
-  openCollegePicker();
-}
-
-/** Fill the college select from the database, falling back to the seed list. */
 async function populateColleges() {
   const select = $("#collegePick");
   if (!select) return;
-  let rows = null;
-  try {
-    rows = await fetchColleges();
-  } catch (err) {
+  const rows = await fetchColleges().catch((err) => {
     console.warn("[UniHaat] college lookup failed", err?.message);
-  }
-  if (rows?.length) {
-    select.innerHTML =
-      `<option value="">Select your college</option>` +
-      rows.map((c) => `<option value="${c.id}" data-short="${c.short_name}">${c.name}</option>`).join("");
-  } else {
-    // Offline: the short name still identifies the college in the seed data.
-    select.innerHTML =
-      `<option value="">Select your college</option>` +
-      COLLEGES.map((c) => `<option value="${c.short}" data-short="${c.short}">${c.label}</option>`).join("");
-  }
+    return null;
+  });
+  const list = rows?.length
+    ? rows.map((c) => ({ short: c.short_name, label: c.name }))
+    : COLLEGES.map((c) => ({ short: c.short, label: c.label }));
+
+  // The campus the account's own address resolves to.
+  const mine = collegeForEmail(getUser()?.email);
+  select.innerHTML =
+    `<option value="">Select your college</option>` +
+    list.map((c) => `<option value="${c.short}" data-short="${c.short}">${c.label}</option>`).join("");
+  if (mine) select.value = mine.short;
 }
 
 export function openCollegePicker() {
@@ -173,8 +168,8 @@ function setAuthMode(mode) {
   $("#authSubmit").textContent = signup ? "Create account" : "Sign in";
   $("#authForm [name=password]").setAttribute("autocomplete", signup ? "new-password" : "current-password");
   $("#authNote").textContent = signup
-    ? "Your college is stored on your profile and powers campus-only discovery."
-    : "Use the same college email you verified with.";
+    ? "UniHaat only opens accounts on a college address — it powers campus-only discovery."
+    : "Use the same college email you signed up with.";
   showError("");
 }
 
@@ -196,7 +191,8 @@ function renderAuthState() {
     $("#avatarBtn").textContent = letter;
     $("#menuAvatar").textContent = letter;
     $("#menuName").textContent = name;
-    const college = profile?.colleges?.short_name || profile?.college_id;
+    const college =
+      profile?.colleges?.short_name || profile?.college_id || collegeForEmail(user?.email)?.short;
     $("#menuCollege").textContent = college ? `${college} · Signed in` : "No college set yet";
     $("#menuDeals").textContent = profile?.deals_completed ?? 0;
     $("#menuSaved").textContent = profile?.items_reused ?? 0;
@@ -205,12 +201,11 @@ function renderAuthState() {
       : "—";
     $("#menuVerify").textContent = profile?.verified ? "✓ Student verified" : "Verify as a student";
     $("#menuVerify").disabled = Boolean(profile?.verified);
-    // Google sign-in has no college step, so offer one until it is set.
-    const needsCollege = !profile?.college_id;
-    $("#menuCollegeBtn").hidden = !needsCollege;
-    $("#menuCollegeBtn").textContent = profile?.colleges?.short_name
-      ? `College: ${profile.colleges.short_name}`
-      : "Choose your college";
+    // The campus follows the address, so there is nothing to choose — the
+    // button just says which one the address resolves to.
+    const campus = profile?.colleges?.short_name || collegeForEmail(user?.email)?.short;
+    $("#menuCollegeBtn").hidden = false;
+    $("#menuCollegeBtn").textContent = campus ? `Campus: ${campus}` : "Campus: from your email";
   } else {
     $("#menuName").textContent = "Guest";
     $("#menuCollege").textContent = "Sign in to sync your listings";
@@ -242,12 +237,28 @@ export function setSyncState(state) {
 
 /* ------------------------------------------------------------------- events */
 
+/**
+ * Point the college dropdown at the college the address belongs to.
+ *
+ * The server reads the college off the domain in any case, so this only
+ * saves the student a click — and shows them the form understood them.
+ */
+function syncCollegeToEmail() {
+  const form = $("#authForm");
+  const select = $("#authCollege");
+  if (!form || !select) return;
+  const college = collegeForEmail(form.email.value);
+  if (college) select.value = college.short;
+}
+
 export function initAuthUI({ onAuth } = {}) {
   onSignedIn = onAuth || (() => {});
 
   $("#authCollege").innerHTML =
     `<option value="">Select your college</option>` +
     COLLEGES.map((c) => `<option value="${c.short}">${c.label}</option>`).join("");
+
+  $("#authForm [name=email]").addEventListener("input", syncCollegeToEmail);
 
   $$(".auth-tab").forEach((t) => t.addEventListener("click", () => setAuthMode(t.dataset.authtab)));
   $("#authOverlay").addEventListener("click", (e) => { if (e.target.id === "authOverlay") closeAuth(); });
@@ -340,31 +351,9 @@ export function initAuthUI({ onAuth } = {}) {
   // College picker (the backdrop and the × button are wired globally in main.js)
   $("#collegeForm").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const value = $("#collegePick").value;
-    if (!value) return;
-    const btn = $("#collegeForm button[type=submit]");
-    btn.disabled = true;
-    try {
-      // The seed list yields a short name; the database yields a uuid.
-      const patch = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(value)
-        ? { college_id: value }
-        : { college_short: value };
-      if (patch.college_short) {
-        // Resolve the short name to the college row the profile expects.
-        const rows = await fetchColleges().catch(() => null);
-        const match = rows?.find((c) => c.short_name === value);
-        if (!match) throw new Error("college not found");
-        patch.college_id = match.id;
-        delete patch.college_short;
-      }
-      await updateProfile(patch);
-      await refreshProfile({ force: true });
-      renderAuthState();
-      closeCollegePicker();
-    } catch (err) {
-      console.warn("[UniHaat] could not save college", err?.message);
-      btn.disabled = false;
-    }
+    // The campus comes from the address. There is nothing to save — a
+    // student cannot put themselves on another campus by asking.
+    closeCollegePicker();
   });
 
   // Keep the tab ink aligned after fonts load / resize
@@ -389,6 +378,10 @@ export function initAuthUI({ onAuth } = {}) {
   });
 
   return initAuth().then(async () => {
+    // The college list carries the mail domains the sign-up form checks
+    // against. The seed copy in `data.js` is the fallback; this keeps the
+    // two from drifting apart.
+    fetchColleges().catch(() => null);
     await refreshProfile();
     renderAuthState();
     announceSession("INIT");
@@ -397,10 +390,7 @@ export function initAuthUI({ onAuth } = {}) {
     if (oauthError) {
       openAuth("signin");
       showError(oauthError.message);
-      return;
     }
-    // Google sign-up has no college step — ask for one, once.
-    maybeAskForCollege();
   });
 }
 
@@ -442,6 +432,10 @@ export const authModeLabel = () => (getMode() === "live" ? "Synced with Supabase
 /** Turn Supabase errors into something a student can act on. */
 function describeError(err) {
   const msg = err?.message || String(err);
+  // The server refuses to open an account that is not on a college address.
+  // It says so as a database error, so the wording is checked for.
+  if (/college_email_required|college.*address|college.*email/i.test(msg))
+    return "UniHaat only takes college email addresses — sign up with the address your college gave you.";
   if (/invalid login credentials/i.test(msg)) return "That email and password combination doesn't match.";
   if (/already registered/i.test(msg)) return "That email already has an account — try signing in.";
   if (/password should be at least/i.test(msg)) return "Password needs at least 6 characters.";

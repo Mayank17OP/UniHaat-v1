@@ -194,21 +194,22 @@ test("the listing and demand joins only name public profile fields", async ({ pa
   }
 });
 
-test("saving the college writes back a named column set", async ({ page }) => {
+test("the app never writes the campus itself", async ({ page }) => {
   const calls = await mockGoogle(page);
   await signIn(page);
 
-  // The college picker is the one write the app makes to a profile.
-  await page.selectOption("#collegePick", COLLEGE_ID);
+  // The campus is read off the address, so the app has nothing to write.
+  await page.click("#avatarBtn");
+  await page.click("#menuCollegeBtn");
+  await expect(page.locator("#collegeOverlay")).toBeVisible();
   await page.click("#collegeForm button[type=submit]");
   await page.waitForTimeout(1200);
 
-  const write = calls.rest.find(
-    (r) => r.method === "PATCH" && r.path.startsWith("/rest/v1/profiles"),
+  // No profile write carries a campus — the server owns that column.
+  const writes = calls.rest.filter(
+    (r) => (r.method === "PATCH" || r.method === "POST") && r.path.startsWith("/rest/v1/profiles"),
   );
-  expect(write, "the college is written to the profile").toBeTruthy();
-  expect(write.select, "the write returns named columns").not.toContain("*");
-  for (const column of ["email", "student_id", "role"]) {
-    expect(write.select || "", `${column} stays out of the profile query`).not.toContain(column);
+  for (const write of writes) {
+    expect(JSON.stringify(write), "the campus is not written by the client").not.toContain("college_id");
   }
 });

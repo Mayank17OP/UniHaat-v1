@@ -88,8 +88,9 @@ const googleProfile = {
   colleges: { id: COLLEGE_ID, short_name: "DTU", name: "Delhi Technological University" },
 };
 
-async function mockGoogle(page) {
+async function mockGoogle(page, opts = {}) {
   const calls = { authorize: null, token: null, rest: [] };
+  const listing = opts.listing || liveListing;
 
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
@@ -142,7 +143,7 @@ async function mockGoogle(page) {
         if (p.startsWith("/rest/v1/profiles")) {
           body = JSON.stringify([googleProfile]);
         } else if (p.startsWith("/rest/v1/listings")) {
-          body = JSON.stringify([liveListing]);
+          body = JSON.stringify([listing]);
         } else if (p.startsWith("/rest/v1/colleges")) {
           body = JSON.stringify([{ id: COLLEGE_ID, short_name: "DTU", name: "Delhi Technological University" }]);
         }
@@ -199,4 +200,21 @@ test("a live listing replaces its offline twin instead of joining it", async ({ 
   // And the card shows the live row, which spells the seller out in full.
   await expect(twins.first()).toContainText("Aarav Sharma");
   await expect(page.locator("#productGrid .card")).toHaveCount(14);
+});
+
+test("a live listing from a seller with no reviews says so, it does not print a perfect score", async ({ page }) => {
+  // The same listing, but the seller has never been reviewed.
+  const unrated = {
+    ...liveListing,
+    profiles: { ...liveListing.profiles, rating_sum: 0, rating_count: 0 },
+  };
+  await mockGoogle(page, { listing: unrated });
+  await signIn(page);
+
+  const card = page.locator("#productGrid .card", { hasText: "Study Table + Chair" });
+  await expect(card.first()).toBeVisible();
+
+  // Nobody has reviewed this seller, so there is no star to print.
+  await expect(card.first()).toContainText("New seller");
+  await expect(card.first()).not.toContainText("★");
 });

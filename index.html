@@ -414,16 +414,16 @@
     </div>
   </div>
 
-  <!-- COLLEGE PICKER (Google sign-up has no college step) -->
+  <!-- CAMPUS (read from the address on the account) -->
   <div class="overlay" id="collegeOverlay" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="collegeTitle">
       <button class="modal-close" data-close aria-label="Close">×</button>
-      <h2 id="collegeTitle">Which campus are you on?</h2>
-      <p class="sub">Your college powers campus-only discovery — listings, demands and SafeSwap handovers near you.</p>
+      <h2 id="collegeTitle">Your campus</h2>
+      <p class="sub">Your campus powers campus-only discovery — listings, demands and SafeSwap handovers near you.</p>
       <form id="collegeForm">
-        <label>College / University<select name="college" id="collegePick" required></select></label>
-        <button class="btn btn-primary btn-block" type="submit">Save my college</button>
-        <p class="fine">You can change this later from your profile menu.</p>
+        <label>College / University<select name="college" id="collegePick" disabled></select></label>
+        <button class="btn btn-primary btn-block" type="submit">Got it</button>
+        <p class="fine">Your campus is read from your college email address, so it cannot be set by hand. Need a different campus? Use the address that college issued you.</p>
       </form>
     </div>
   </div>
@@ -462,7 +462,7 @@
       <h2 id="verifyTitle">Verify as a student</h2>
       <p class="sub">Verified students can sell, post demands and use SafeSwap. Browsing is open to all.</p>
       <form id="verifyForm">
-        <label>College email<input name="email" type="email" required placeholder="you@dtce.ac.in" /></label>
+        <label>College email on your account<input name="email" type="email" readonly placeholder="you@dtu.ac.in" /></label>
         <label>College / University<select name="college" id="verifyCollege" required>
           <option value="">Select your college</option>
           <option value="DTU">Delhi Technological University</option>
@@ -474,9 +474,9 @@
           <option value="IPU">Indraprastha University</option>
           <option value="NSUT">Netaji Subhas University of Technology</option>
         </select></label>
-        <label>Student ID (optional)<input name="studentId" placeholder="DTU/2K23/… " /></label>
-        <button class="btn btn-primary btn-block" type="submit">Send verification OTP</button>
-        <p class="fine">Demo: any college email verifies instantly in this prototype.</p>
+        <label>Student ID<input name="studentId" required placeholder="DTU/2K23/… " /></label>
+        <button class="btn btn-primary btn-block" type="submit">Verify me</button>
+        <p class="fine">Your college address and your student ID are the evidence. The server checks both before it marks you verified.</p>
       </form>
     </div>
   </div>

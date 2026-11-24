@@ -24,12 +24,43 @@ Live project `UniHaat` · ref `gzbmqwvybcmxlsgouhyh` · region `ap-south-1`.
 | **Schema** | 13 tables + an `impact_summary` view — `supabase/migrations/` |
 | **Automation** | Signup→profile trigger, UniMatch scoring, SafeSwap completion, rating aggregates |
 | **Security** | RLS forced on every table (36 policies), column-scoped grants, a server-only function surface, verified against the live database |
-| **Reputation** | `verified`, `role` and the rating aggregates are server-owned columns — students write only their own name, college, bio and avatar |
+| **Reputation** | `verified`, `role`, `student_id`, `college_id` and the rating aggregates are server-owned columns — students write only their own name, bio, department, year and avatar |
 | **Auth** | Email + password, Google OAuth (PKCE), sessions persisted in the browser |
+| **Admission** | An account may only exist on a college address — enforced by a `BEFORE INSERT` trigger on `auth.users`, for password sign-ups and Google alike |
 
 The app boots from local seed data and **never waits on the network**. Sign in and it upgrades
 to live Postgres data; if Supabase is unreachable it keeps running locally and the status pill
 in the nav reads *Local*.
+
+### College email only
+
+UniHaat is a campus marketplace, so an account may only exist on an address that belongs to
+one of the colleges. The rule is enforced **in the database**, not in the form:
+
+| | |
+|---|---|
+| **Where** | `guard_college_email()` — a `BEFORE INSERT` trigger on `auth.users`, plus `BEFORE UPDATE OF email` so an account cannot be moved onto a personal address |
+| **What it covers** | Password sign-up, Google sign-up, accounts created from the admin API, and a later email change |
+| **The list** | `colleges.email_domain` — DTU `dtu.ac.in`, DU `du.ac.in`, Hansraj `hansrajcollege.ac.in`, IIT Delhi `iitd.ac.in`, Jamia `jmi.ac.in`, Amity `amity.edu`, IPU `ipu.ac.in`, NSUT `nsut.ac.in` |
+| **Sub-domains** | A campus sub-domain counts as its parent college (`gn.amity.edu` is Amity). The dot is the boundary, so `notdtu.ac.in` is nobody's |
+| **The campus** | `handle_new_user()` reads the college off the address, so a student cannot put themselves on another campus |
+
+The browser checks the same list before it makes a request — `src/college-email.js` holds the
+matcher, and the list itself is fetched from `colleges.email_domain` so the two cannot drift
+apart. The frontend check is a courtesy; the trigger is the rule.
+
+### Student verification
+
+`profiles.verified` is a server-owned column — a client has no `UPDATE` grant on it, on
+`student_id`, or on `college_id`. A student becomes verified through
+`claim_student_verification()`, which asks for evidence the server can check:
+
+- the address on the account belongs to a college, and is **confirmed** rather than claimed;
+- the student supplies their **roll number**, which the college would recognise.
+
+Without both, the server leaves the student unverified and says so. A moderator can still
+approve a student by hand through `staff_update_profile`. The app follows the server's
+answer — it never marks a student verified on its own.
 
 ### Google sign-in
 
@@ -53,8 +84,9 @@ To re-apply the provider configuration:
    ```
    …or in the dashboard: **Authentication → Providers → Google**.
 
-A student who arrives through Google has no college (the email sign-up path asks for one,
-the OAuth path cannot), so the app opens a college picker once and saves it to their profile.
+A student who arrives through Google has no college step to answer, because the campus is
+read from their address — and if that address is not a college one, the database refuses to
+open the account and the app explains why.
 
 ## What's in the prototype
 
@@ -88,27 +120,35 @@ npm test          # provisions a headless Chromium, then runs the suite
 SafeSwap modal, SmartPrice (incl. condition selector), Demand Board + UniMatch relevance,
 SafeSwap completion, wishlist persistence, sell flow, chat, verification, UniImpact
 counters/bars, auth modal (tabs, Google, validation), sync status, motion layer, Supabase
-row mapping, mobile overflow, clipped-control detection and the mobile menu.
+row mapping, the unrated-seller rating, mobile overflow, clipped-control detection and the
+mobile menu.
 
 7 tests in `tests/oauth.spec.js` drive the Google flow with GoTrue mocked at the network
-layer: the PKCE authorize URL, the consent-screen behaviour, the landing, the college
-picker, a denied sign-in, and the profile menu's position.
+layer: the PKCE authorize URL, the consent-screen behaviour, the landing, the campus that
+follows the address, a campus that cannot be set by hand, a denied sign-in, and the profile
+menu's position.
 
 4 tests in `tests/counters.spec.js` cover the stat counters: they never paint a negative
 number, they survive a frame timestamp that predates their start, they survive a clock
 that jumps backwards mid-animation, and they settle on the exact target value.
 
 4 tests in `tests/profile-privacy.spec.js` cover the profile read: the app names the
-columns it renders instead of asking for the whole row, and it never asks for the
+columns it renders instead of asking for the whole row, it never asks for the
 private columns (`email`, `student_id`, `role`) that the database does not grant to a
-client.
+client, and it never writes the campus — the server owns that column.
 
 2 tests in `tests/live-sync.spec.js` cover the signed-in marketplace: the listing query
 names the seller's foreign key (PostgREST cannot resolve it on its own, because
 `wishlists` reaches `profiles` through the same two tables), and a live listing replaces
 its offline twin instead of being shown next to it.
 
-That is 42 tests in total.
+7 tests in `tests/college-email.spec.js` cover the admission rule on the browser side: a
+personal address is refused on sign-up **and** on sign-in without reaching the network, a
+lookalike domain (`notdtu.ac.in`) is nobody's, a college address does reach the server,
+the campus follows the address (including a campus sub-domain), the app asks the server
+which addresses it accepts, and a Google account that is not a college account is told why.
+
+That is 51 tests in total.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.
@@ -122,10 +162,13 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
 ```
 
 It checks the privilege surface (column grants, function `EXECUTE`, the closed view,
-forced row level security) and then walks a handover from opening to completion and
-verifies that a student's rating aggregate is rebuilt from the review rows — after an
-insert, after an edit and after a removal. It runs inside a transaction that is rolled
-back at the end, so it never leaves anything behind.
+forced row level security), the admission rule (a personal address, a lookalike domain
+and a moved address are all refused by the `auth.users` trigger), the evidence rule (a
+student with a college address but no roll number stays unverified, and a client cannot
+write the student id, the campus or the verified flag), and then walks a handover from
+opening to completion and verifies that a student's rating aggregate is rebuilt from the
+review rows — after an insert, after an edit and after a removal. It runs inside a
+transaction that is rolled back at the end, so it never leaves anything behind.
 
 ## Deployment
 

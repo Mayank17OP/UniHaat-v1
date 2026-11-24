@@ -11,9 +11,12 @@ import { getProfileData } from "./auth.js";
 
 export function listingFromRow(row) {
   const seller = row.profiles || {};
+  // A seller with no reviews has no star rating. Writing "5.0" for them
+  // would claim a perfect score nobody gave — so the rating stays null and
+  // the card says the seller is new.
   const rating = seller.rating_count
-    ? (seller.rating_sum / seller.rating_count).toFixed(1)
-    : "5.0";
+    ? Number((seller.rating_sum / seller.rating_count).toFixed(1))
+    : null;
   const images = (row.listing_images || [])
     .slice()
     .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
@@ -30,7 +33,7 @@ export function listingFromRow(row) {
     college: seller.colleges?.short_name ?? "Campus",
     scope: "same",
     seller: seller.full_name ?? "Student",
-    rating: Number(rating),
+    rating,
     deals: seller.deals_completed ?? 0,
     img: images[0]?.url ?? "./assets/table-chair.svg",
     desc: row.description ?? "",
