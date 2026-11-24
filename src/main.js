@@ -731,6 +731,7 @@ function updateLocationUI() {
   const chipText = $("#locationChipText");
   const headerBtn = $("#headerLocationBtn");
   const headerText = $("#headerLocationText");
+  const profileToggle = $("#profileLocationToggle");
   const mLocBtn = $("#mLocationBtn");
   const hint = $("#locationHint");
   const sub = $("#marketplaceSub");
@@ -744,6 +745,10 @@ function updateLocationUI() {
       headerBtn.setAttribute("aria-pressed", "true");
     }
     if (headerText) headerText.textContent = `Location: On · ${tag}`;
+    if (profileToggle) {
+      profileToggle.textContent = `Location: On · ${tag}`;
+      profileToggle.setAttribute("aria-pressed", "true");
+    }
     if (mLocBtn) mLocBtn.textContent = `Location: ${tag}`;
     if (hint) {
       hint.textContent = userLocation.source === "device"
@@ -761,6 +766,10 @@ function updateLocationUI() {
       headerBtn.setAttribute("aria-pressed", "false");
     }
     if (headerText) headerText.textContent = "Location: Off";
+    if (profileToggle) {
+      profileToggle.textContent = "Location: Off";
+      profileToggle.setAttribute("aria-pressed", "false");
+    }
     if (mLocBtn) mLocBtn.textContent = "Set location";
     if (hint) hint.textContent = "Allow location and we’ll sort listings by how close they are. Or pick a campus by hand.";
     if (sub) sub.textContent = "Same college, same university and nearby colleges — sorted by distance. Every listing shows a SmartPrice verdict.";
@@ -834,6 +843,20 @@ function onLocationTrigger() {
 }
 
 $("#headerLocationBtn")?.addEventListener("click", onLocationTrigger);
+$("#profileLocationToggle")?.addEventListener("click", () => {
+  if (!userLocation) {
+    handleDeviceLocationRequest({ fromPrompt: false });
+  } else {
+    userLocation = null;
+    clearStoredLocation();
+    if (signedIn) persistClearLocation();
+    state.radius = "all";
+    if ($("#radiusSelect")) $("#radiusSelect").value = "all";
+    updateLocationUI();
+    renderGrid();
+    toast("Location turned off");
+  }
+});
 $("#mLocationBtn")?.addEventListener("click", () => {
   $("#mobileMenu")?.classList.remove("open");
   onLocationTrigger();
