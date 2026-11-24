@@ -69,7 +69,12 @@ function runCounter(el) {
   const decimals = +(el.dataset.decimals || 0);
   const t0 = performance.now(), dur = 1400;
   const tick = (t) => {
-    const p = Math.min(1, (t - t0) / dur), eased = 1 - Math.pow(1 - p, 3);
+    // The first rAF timestamp can predate t0 (the callback's timestamp is the
+    // frame's start, which may predate when we asked for the frame), which
+    // would ease past 0 and briefly render a negative number. Clamp both
+    // ends of the progress.
+    const p = Math.max(0, Math.min(1, (t - t0) / dur));
+    const eased = 1 - Math.pow(1 - p, 3);
     el.textContent = pre + (target * eased).toLocaleString("en-IN", {
       minimumFractionDigits: decimals, maximumFractionDigits: decimals,
     }) + suf;

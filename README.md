@@ -94,5 +94,28 @@ row mapping, mobile overflow, clipped-control detection and the mobile menu.
 layer: the PKCE authorize URL, the consent-screen behaviour, the landing, the college
 picker, a denied sign-in, and the profile menu's position.
 
+3 tests in `tests/counters.spec.js` cover the stat counters: they never paint a negative
+number, they survive a frame timestamp that predates their start, and they settle on the
+exact target value.
+
+That is 35 tests in total.
+
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.
+
+## Deployment
+
+The frontend is a static site. `scripts/build.mjs` copies it into `dist/` and generates
+`src/config.js` from `SUPABASE_URL` and `SUPABASE_ANON_KEY`, so a deployment can be pointed
+at a different Supabase project without touching the source. `vercel.json` pins the build
+command, the output directory and the cache/security headers.
+
+```bash
+SUPABASE_URL=https://<ref>.supabase.co \
+SUPABASE_ANON_KEY=sb_publishable_... \
+node scripts/build.mjs
+```
+
+Both variables are set on the Vercel project for production and preview. The publishable
+key is public by design — Row Level Security is what actually protects the data — and the
+service-role key never leaves the server.

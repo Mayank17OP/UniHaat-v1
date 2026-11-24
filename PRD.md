@@ -298,8 +298,9 @@ Supporting: listings/week, demand match rate, median time-to-sell, wishlist→bu
 
 ## 15. Acceptance Criteria (v1 Prototype)
 
-All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`
-and `tests/oauth.spec.js` (32 tests, all passing). See §16 for the verification record.
+All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`,
+`tests/oauth.spec.js` and `tests/counters.spec.js` (35 tests, all passing). See §16 for the
+verification record.
 
 - [x] Browse/search/filter/sort 14 realistic listings; wishlist persists across reload.
 - [x] Product detail shows Passport, SmartPrice verdict, seller, chat entry, SafeSwap QR.
@@ -323,6 +324,10 @@ and `tests/oauth.spec.js` (32 tests, all passing). See §16 for the verification
       of private data and anonymous writes.
 - [x] **A student cannot rewrite their own reputation** — `verified`, `role` and the rating
       aggregates are server-owned columns; only the fields a student owns are writable.
+- [x] **A student cannot mint their own reputation** — a SafeSwap handover completes only
+      when both students confirm, the seller must own the listing, the amount is bounded by
+      the listed price, and a finished transaction is frozen so the aggregate cannot be
+      replayed.
 - [x] **A failed Google sign-in says so** — a denied consent screen reopens the auth modal
       with an explanation instead of landing silently on the homepage.
 
@@ -400,6 +405,48 @@ A profile also cannot be created pre-verified or pre-promoted: the insert policy
 `staff_update_profile()` are `SECURITY DEFINER`, so the browser never writes a
 server-owned column itself.
 
+**Two-party handovers.** The column-scoped grant above closed the *direct* writes, but the
+reputation counters had a second door: `transactions`. The policies let a student create a
+transaction naming any other student as the seller — for a listing that had nothing to do
+with that seller — and then set the status straight to `completed`. The completion trigger
+credited both sides, so the attacker handed themselves `deals_completed + 1`,
+`items_reused + 1` and `saved_rupees += amount` for an amount of their choosing (999999
+was accepted). The same UPDATE could then be replayed — `completed → agreed → completed` —
+and the aggregate fired a second time, because the trigger only checked that the status had
+changed, not that it had not already been completed.
+
+This was reproduced against the live database before the fix: a student's `saved_rupees`
+went from 0 to 999,999 and `deals_completed` from 12 to 13, with no counterparty involved.
+
+The schema already had `buyer_confirmed_at` and `seller_confirmed_at`. Nothing read them.
+A SafeSwap handover is a two-party event, so they are now what gate completion
+(`0006_transaction_and_reputation_guards.sql`, `0007_transaction_terminal_state.sql`):
+
+| Rule | Enforced by |
+|---|---|
+| The seller must be the student who owns the listing | `guard_transaction_state()` |
+| The amount is bounded by the listed price | `guard_transaction_state()` |
+| The listing, both students and the amount cannot change after creation | `guard_transaction_state()` |
+| Only the buyer may stamp `buyer_confirmed_at`, only the seller `seller_confirmed_at` | `guard_transaction_state()` |
+| Completion requires **both** confirmations | `guard_transaction_state()` |
+| A finished transaction is frozen — no status, confirmation or swap-code edits | `guard_transaction_state()` |
+| Each side is credited exactly once | `apply_transaction_completion()` |
+
+**Profile creation.** `students insert own profile` checked `verified` and `role` but not
+the counters, so the row a client inserts could carry `rating_sum = 5000`. The signup
+trigger creates the row first, so the insert hit the primary key — a coincidence rather than
+a control. The INSERT grant is now scoped to the columns a student owns
+(`id`, `full_name`, `avatar_url`, `bio`, `department`, `year_of_study`, `college_id`,
+`student_id`), and the policy pins every server-owned column to its default. Students also
+cannot delete their own profile: the row belongs to the account, and `auth.users` owns its
+lifecycle.
+
+**Review scores.** The rating and the parties are what the aggregate was computed from, so
+they are fixed once a review exists; only `body` and `condition_match` remain editable.
+
+**Privileges no client role needs.** `TRUNCATE` is not covered by row-level security, so it
+is revoked from `anon` and `authenticated` along with `TRIGGER` and `REFERENCES`.
+
 ### Auth configuration
 Email/password enabled, `mailer_autoconfirm` on for demo friction, site URL and redirect
 allow-list set for `localhost:5173` and the preview host. Google OAuth is enabled with a
@@ -439,6 +486,8 @@ scripts/make-fonts.mjs       Re-copies font files out of node_modules
 scripts/vendor-supabase.mjs  Re-vendors the Supabase browser client
 scripts/setup-browser.mjs    Provisions a headless Chromium for Playwright
 scripts/configure-google-auth.mjs  Enables Google OAuth via the Management API
+scripts/build.mjs         Static build for deployment — emits dist/ and generates src/config.js
+vercel.json               Build command, output directory, cache and security headers
 ```
 
 ### Running
@@ -447,7 +496,19 @@ npm install
 npm run dev        # static server on :5173
 npm test           # provisions the browser, then runs the Playwright suite
 npm run setup:assets   # regenerate illustrations, fonts and the vendored client
+node scripts/build.mjs   # build dist/ for deployment
 ```
+
+### Deployment
+The frontend is deployed to Vercel from `main`, connected to the GitHub repository. The
+project builds with `node scripts/build.mjs` and serves `dist/`. `SUPABASE_URL` and
+`SUPABASE_ANON_KEY` are set as encrypted environment variables on the Vercel project for
+both production and preview, so the build generates a `src/config.js` pointing at the live
+Supabase project without the key ever being written into the source. The publishable key is
+public by design — Row Level Security is what actually protects the data — and the
+service-role key never leaves the server.
+
+The backend is the Supabase project above. Migrations `0001`–`0007` are applied to it.
 
 ### Implementation notes
 - **SmartPrice v1** is a transparent rule-based model — category depreciation curve × condition
@@ -464,6 +525,12 @@ npm run setup:assets   # regenerate illustrations, fonts and the vendored client
   and the status pill reads *Local* rather than breaking.
 - **Illustrations** are hand-authored line art in the brand palette rather than stock photos,
   which keeps the prototype offline-capable and visually consistent with the type system.
+- **Stat counters clamp their progress.** The count-up reads the animation frame's timestamp,
+  which on the first frame can predate the moment the counter started. Unclamped, that eased
+  past zero and briefly painted a negative number — "-10,598 verified students" showed up
+  on the deployed page. The progress is now clamped at both ends, and
+  `tests/counters.spec.js` reproduces the ordering deliberately so the regression cannot
+  come back.
 
 ### The motion layer (`src/alive.js`)
 Motion is treated as a response to input rather than decoration. Every primitive animates
