@@ -47,10 +47,15 @@ function describeOAuthError(code, raw) {
     return "That sign-in was blocked. Check the redirect URI in your Google OAuth settings.";
   if (c.includes("session_not_found") || c.includes("invalid_code"))
     return "That sign-in link has expired. Try Google sign-in again.";
-  // The server refuses to open an account that is not on a college address.
-  // It says so as a database error, so the wording is checked for.
+  // The server refuses to open an account that is not on a college
+  // address. It says so as a database error — the trigger on `auth.users`
+  // raises, and GoTrue reports the failure without the reason — so the
+  // wording is checked for.
+  //
+  // The message does not blame the student: a campus that is missing from
+  // our list is our gap, not theirs.
   if (/college|database error/i.test(String(raw || "")))
-    return "That Google account isn't a college account. UniHaat only takes college email addresses — sign in with your college Google account.";
+    return "We couldn't open an account for that Google account. UniHaat only takes college email addresses — if your college isn't on our list yet, tell us and we'll add it.";
   if (c.includes("server_error") || c.includes("temporarily_unavailable"))
     return "Google had a problem signing you in. Try again in a moment.";
   return raw ? `Google sign-in failed: ${raw}` : "Google sign-in failed. Try again.";
@@ -261,6 +266,24 @@ function syncCollegeToEmail() {
   if (college) select.value = college.short;
 }
 
+/**
+ * Fill the college picker.
+ *
+ * The list comes from the database, because the database is the list the
+ * server enforces: a college added there has to be offered here too, or
+ * the student cannot pick it and the sign-up form cannot be completed.
+ * The copy in `data.js` is only the offline fallback.
+ */
+function renderCollegePicker(list) {
+  const select = $("#authCollege");
+  if (!select || !list?.length) return;
+  select.innerHTML =
+    `<option value="">Select your college</option>` +
+    list.map((c) => `<option value="${c.short}">${c.label}</option>`).join("");
+  // The address may already have named a college.
+  syncCollegeToEmail();
+}
+
 export function initAuthUI({ onAuth } = {}) {
   onSignedIn = onAuth || (() => {});
 
@@ -270,9 +293,7 @@ export function initAuthUI({ onAuth } = {}) {
   // sign-in was refused.
   const oauthError = readOAuthError();
 
-  $("#authCollege").innerHTML =
-    `<option value="">Select your college</option>` +
-    COLLEGES.map((c) => `<option value="${c.short}">${c.label}</option>`).join("");
+  renderCollegePicker(COLLEGES.map((c) => ({ short: c.short, label: c.label })));
 
   $("#authForm [name=email]").addEventListener("input", syncCollegeToEmail);
 
@@ -402,9 +423,16 @@ export function initAuthUI({ onAuth } = {}) {
 
   return initAuth().then(async () => {
     // The college list carries the mail domains the sign-up form checks
-    // against. The seed copy in `data.js` is the fallback; this keeps the
-    // two from drifting apart.
-    fetchColleges().catch(() => null);
+    // against, and it is the list the server enforces. The seed copy in
+    // `data.js` is only the fallback; the database is the truth, so the
+    // picker is refilled from it as soon as it arrives. A college added
+    // to the database then appears without a redeploy.
+    fetchColleges()
+      .then((rows) => {
+        if (!rows?.length) return;
+        renderCollegePicker(rows.map((c) => ({ short: c.short_name, label: c.name })));
+      })
+      .catch(() => null);
     await refreshProfile();
     renderAuthState();
     announceSession("INIT");
@@ -456,6 +484,11 @@ function describeError(err) {
   // It says so as a database error, so the wording is checked for.
   if (/college_email_required|college.*address|college.*email/i.test(msg))
     return "UniHaat only takes college email addresses — sign up with the address your college gave you.";
+  // The same refusal, said the way GoTrue says it. The trigger on
+  // `auth.users` raises and the server reports the failure without the
+  // reason, so the message is what the student is left with.
+  if (/database error (saving|creating) new user/i.test(msg))
+    return "We couldn't open an account for that address. UniHaat only takes college email addresses — if your college isn't on our list yet, tell us and we'll add it.";
   if (/invalid login credentials/i.test(msg)) return "That email and password combination doesn't match.";
   if (/already registered/i.test(msg)) return "That email already has an account — try signing in.";
   if (/password should be at least/i.test(msg)) return "Password needs at least 6 characters.";

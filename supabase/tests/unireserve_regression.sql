@@ -759,6 +759,55 @@ begin
   end if;
 end $$;
 
+-- The demonstration runs in a sandbox of its own, and it must leave the
+-- campus as it found it.
+--
+-- Two things are checked here. The sandbox itself is gone — no
+-- demonstration types, no demonstration units, no demonstration
+-- reservations — and nothing that looks like a real reservation was left
+-- behind. The log is where that goes wrong: the release inside the
+-- sandbox writes a row, and if that row is not marked as the
+-- demonstration's it sits in the public reservation log looking like a
+-- real student's decision.
+do $$
+begin
+  if exists (select 1 from public.reserve_resource_types t where t.is_demo)
+     or exists (select 1 from public.reserve_resource_units u where u.is_demo)
+     or exists (select 1 from public.reserve_reservations r where r.is_demo) then
+    raise exception 'the demonstration left its sandbox behind';
+  end if;
+
+  -- A row that mentions the sandbox's resources, and is not marked as
+  -- the demonstration's, would be a live-looking entry in the public
+  -- reservation log.
+  if exists (
+    select 1
+      from public.reserve_reservation_logs l
+     where not l.is_demo
+       and (
+             l.request::text like '%demo-%'
+          or l.allocation::text like '%demo-%'
+          or l.available::text like '%demo-%'
+          or l.safe_sequence::text like '%demo-%'
+       )
+  ) then
+    raise exception 'the demonstration left a live-looking entry in the reservation log';
+  end if;
+
+  -- Every row the demonstration wrote is marked as the demonstration's.
+  -- A release inside the sandbox is the row that goes wrong: it names
+  -- the sandbox's resources, so it has to carry the flag.
+  if exists (
+    select 1
+      from public.reserve_reservation_logs l
+     where l.event = 'released'
+       and not l.is_demo
+       and (l.request::text like '%demo-%' or l.allocation::text like '%demo-%')
+  ) then
+    raise exception 'the demonstration left an unmarked release in the reservation log';
+  end if;
+end $$;
+
 reset role;
 
 rollback;

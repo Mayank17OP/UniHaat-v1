@@ -364,8 +364,38 @@ console.log("\n· the demonstration scenarios");
 
   const leftovers = await raw(`select count(*)::int as n from public.reserve_resource_types where is_demo`);
   eq("the sandbox is cleaned up", leftovers.rows[0].n, 0);
-  const leftovers2 = await raw(`select count(*)::int as n from public.reserve_reservation_logs where is_demo`);
+  const leftovers2 = await raw(`select count(*)::int as n from public.reserve_reservation_logs where is_demo and event = 'demo'`);
   eq("the demo run is logged once", leftovers2.rows[0].n, 1);
+
+  // The release inside the sandbox writes a row too, and that row has to
+  // carry the demonstration's mark — otherwise it sits in the public
+  // reservation log looking like a real student's decision.
+  const demoReleases = await raw(
+    `select count(*)::int as n from public.reserve_reservation_logs where is_demo and event = 'released'`
+  );
+  ok("the sandbox release is marked as the demonstration's", demoReleases.rows[0].n >= 1);
+
+  // The release inside the sandbox writes a row. If that row is not
+  // marked as the demonstration's, it sits in the public reservation log
+  // looking like a real student's decision.
+  const leaked = await raw(
+    `select count(*)::int as n
+       from public.reserve_reservation_logs l
+      where not l.is_demo
+        and (l.request::text like '%demo-%'
+             or l.allocation::text like '%demo-%'
+             or l.available::text like '%demo-%')`
+  );
+  eq("the demonstration leaves nothing in the public log", leaked.rows[0].n, 0);
+
+  const unmarked = await raw(
+    `select count(*)::int as n
+       from public.reserve_reservation_logs l
+      where l.event = 'released'
+        and not l.is_demo
+        and (l.request::text like '%demo-%' or l.allocation::text like '%demo-%')`
+  );
+  eq("every release the demonstration wrote is marked as its own", unmarked.rows[0].n, 0);
 }
 
 // ---------------------------------------------------------------------------

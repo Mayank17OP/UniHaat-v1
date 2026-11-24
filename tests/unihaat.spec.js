@@ -217,7 +217,9 @@ test("auth modal switches between sign in and sign up", async ({ page }) => {
   await expect(page.locator("#nameField")).toBeVisible();
   await expect(page.locator("#collegeField")).toBeVisible();
   await expect(page.locator("#authSubmit")).toHaveText("Create account");
-  await expect(page.locator("#authCollege option")).toHaveCount(9);
+  // One option per college, plus the placeholder.
+  await expect(page.locator("#authCollege option")).toHaveCount(10);
+  await expect(page.locator("#authCollege option[value=DTC]")).toHaveCount(1);
 });
 
 test("auth modal offers Google sign-in", async ({ page }) => {
