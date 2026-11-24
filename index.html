@@ -37,6 +37,7 @@
         <a href="#clearance">Hostel Clearance</a>
         <a href="#smartprice">SmartPrice</a>
         <a href="#safeswap">SafeSwap</a>
+        <a href="#unireserve">UniReserve</a>
         <a href="#impact">UniImpact</a>
       </nav>
       <div class="nav-actions">
@@ -58,7 +59,7 @@
       </div>
     </div>
     <div class="mobile-menu" id="mobileMenu">
-      <a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#impact">UniImpact</a>
+      <a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#unireserve">UniReserve</a><a href="#impact">UniImpact</a>
       <div class="mobile-actions">
         <button class="btn btn-ghost" id="mVerifyBtn" type="button">Verify student</button>
         <button class="btn btn-primary" id="mSellBtn" type="button">+ Sell an item</button>
@@ -323,6 +324,87 @@
       </div>
     </section>
 
+    <!-- UNIRESERVE -->
+    <section class="section band-dark" id="unireserve">
+      <div class="wrap">
+        <div class="section-head reveal light">
+          <div>
+            <p class="eyebrow light">UniReserve · Banker's Algorithm on the server</p>
+            <h2>Smart Reservations.<br/>Safe Allocations. Zero Deadlocks.</h2>
+            <p class="sub light">Reserve a campus cycle, a scientific calculator or a study table. Every request is checked by the Banker's Algorithm before it is approved — so a reservation can never take a resource somebody else is waiting for, and two students can never take the last unit at the same moment.</p>
+          </div>
+          <div class="reserve-engine">
+            <span class="reserve-engine-pill" id="reserveEngine">Engine · checking…</span>
+            <p class="fine light" id="reserveEngineNote">Looking for the campus stock…</p>
+          </div>
+        </div>
+
+        <div class="reserve-stats reveal">
+          <div><strong id="reserveTotal">0</strong><span>Total resources</span></div>
+          <div><strong id="reserveAllocated">0</strong><span>Allocated</span></div>
+          <div><strong id="reserveAvailable">0</strong><span>Available</span></div>
+          <div><strong id="reservePending">0</strong><span>Pending</span></div>
+          <div><strong id="reserveApproved">0</strong><span>Approved</span></div>
+          <div><strong id="reserveUnsafe">0</strong><span>Unsafe attempts blocked</span></div>
+        </div>
+
+        <div class="reserve-layout">
+          <div class="reveal">
+            <h3 class="reserve-h3">Campus stock</h3>
+            <div class="reserve-types" id="reserveTypes"></div>
+
+            <form class="panel reserve-form" id="reserveForm">
+              <h3>Request a reservation</h3>
+              <p class="fine">Say what you need <strong>now</strong>, and what you could need <strong>at most</strong>. The campus holds your maximum back, and that is what keeps everybody's allocation safe.</p>
+              <div class="two">
+                <label>How long?<select id="reserveDuration">
+                  <option value="1">1 day</option>
+                  <option value="7" selected>1 week</option>
+                  <option value="14">2 weeks</option>
+                  <option value="30">1 month</option>
+                  <option value="90">3 months</option>
+                </select></label>
+                <label>For a listing<select id="reserveListing"><option value="">No particular listing</option></select></label>
+              </div>
+              <div class="reserve-matrix" id="reserveMatrix"></div>
+              <button class="btn btn-primary btn-block" id="reserveSubmit" type="submit">Request reservation</button>
+              <div class="reserve-outcome" id="reserveOutcome" role="status" aria-live="polite" hidden></div>
+            </form>
+          </div>
+
+          <div class="reveal">
+            <h3 class="reserve-h3">Your reservations</h3>
+            <div class="reserve-mine" id="reserveMine"></div>
+
+            <div class="panel dark reserve-dash">
+              <div class="row-between">
+                <h3>UniReserve dashboard</h3>
+                <button class="btn btn-ghost" id="reserveRefresh" type="button">Refresh</button>
+              </div>
+              <h4 class="reserve-h4">Available vector</h4>
+              <div class="reserve-vector" id="reserveVector"></div>
+              <h4 class="reserve-h4">Current safe sequence</h4>
+              <ol class="reserve-sequence" id="reserveSequence"></ol>
+              <h4 class="reserve-h4">Reservation log</h4>
+              <div class="reserve-log" id="reserveLog"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel dark reserve-demo">
+          <div class="row-between reserve-demo-head">
+            <div>
+              <p class="eyebrow light">Demonstration mode</p>
+              <h3>Four worked examples, run live</h3>
+            </div>
+            <button class="btn btn-primary" id="reserveDemoBtn" type="button">Run the examples</button>
+          </div>
+          <p class="sub light">The same algorithm the campus uses, run against a sandbox of its own: a safe reservation approved, an unsafe one blocked, resources released when a rental finishes, and the safe sequence changing after an allocation.</p>
+          <div class="reserve-scenarios" id="reserveScenarios"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- UNIIMPACT -->
     <section class="section band" id="impact">
       <div class="wrap">
@@ -354,7 +436,7 @@
         <p class="logo-word big">Uni<em>Haat</em></p>
         <p>Your Campus. Your Marketplace.<br/>Verified, hyperlocal, student-to-student.</p>
       </div>
-      <nav aria-label="Footer"><a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#impact">UniImpact</a></nav>
+      <nav aria-label="Footer"><a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#unireserve">UniReserve</a><a href="#impact">UniImpact</a></nav>
       <div>
         <p><strong>Trust &amp; safety</strong></p>
         <p>Verified students only · Report &amp; block · Safe public pickup · No advance payment</p>

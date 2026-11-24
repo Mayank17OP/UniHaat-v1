@@ -167,3 +167,103 @@ export async function persistWishlist(listingId, saved) {
     return null;
   }
 }
+
+/* ------------------------------------------------------------ UniReserve */
+
+/**
+ * A reservation row, as the interface wants it.
+ *
+ * The database keeps the matrices in their own tables; the browser wants
+ * one object with the allocation, the need and the safe sequence already
+ * worked out, so the interface never has to do arithmetic it should not.
+ */
+export function reservationFromRow(row) {
+  const allocation = row.allocation ?? {};
+  const need = row.need ?? {};
+  return {
+    id: row.id,
+    status: row.status,
+    decision: row.decision ?? null,
+    reason: row.reason ?? null,
+    durationDays: Number(row.duration_days ?? 0),
+    startsAt: row.starts_at ?? null,
+    endsAt: row.ends_at ?? null,
+    createdAt: row.created_at ?? null,
+    listingId: row.listing_id ?? null,
+    mine: Boolean(row.mine),
+    allocation,
+    need,
+    safeSequence: Array.isArray(row.safe_sequence) ? row.safe_sequence : [],
+    live: true,
+  };
+}
+
+/**
+ * The dashboard payload.
+ *
+ * The safe sequence comes back as a list of reservation ids; the interface
+ * shows it as the order the campus can finish its reservations in, so the
+ * ids are turned into short labels here.
+ */
+export function reserveDashboardFromRow(raw) {
+  if (!raw) return null;
+  const reservations = (raw.reservations ?? []).map(reservationFromRow);
+  const mine = (raw.mine ?? []).map(reservationFromRow);
+  const byId = new Map(reservations.map((r) => [r.id, r]));
+  const label = (id) => {
+    const r = byId.get(id);
+    if (!r) return id.slice(0, 8);
+    const held = Object.entries(r.allocation)
+      .map(([slug, n]) => `${n} ${slug}`)
+      .join(", ");
+    return held || "waiting";
+  };
+  return {
+    totals: raw.totals ?? { total: 0, allocated: 0, available: 0 },
+    counts: raw.counts ?? { pending: 0, approved: 0, blocked: 0, finished: 0, total: 0 },
+    types: raw.types ?? [],
+    available: raw.available ?? {},
+    safe: Boolean(raw.safe),
+    safeSequence: (raw.safe_sequence ?? []).map((id) => ({ id, label: label(id) })),
+    reservations,
+    mine,
+    logs: (raw.logs ?? []).map((l) => ({
+      id: l.id,
+      event: l.event,
+      decision: l.decision,
+      reason: l.reason,
+      request: l.request ?? {},
+      allocation: l.allocation ?? {},
+      available: l.available ?? {},
+      safeSequence: Array.isArray(l.safe_sequence) ? l.safe_sequence : [],
+      createdAt: l.created_at,
+    })),
+    expired: Number(raw.expired ?? 0),
+  };
+}
+
+/** The rentable catalogue, as the interface wants it. */
+export function reserveCatalogueFromRow(raw) {
+  if (!raw) return null;
+  return {
+    types: (raw.types ?? []).map((t) => ({
+      slug: t.slug,
+      label: t.label,
+      unitLabel: t.unit_label ?? "unit",
+      category: t.category ?? null,
+      description: t.description ?? "",
+      total: Number(t.total ?? 0),
+      allocated: Number(t.allocated ?? 0),
+      available: Number(t.available ?? 0),
+    })),
+    units: (raw.units ?? []).map((u) => ({
+      id: u.id,
+      label: u.label,
+      type: u.type,
+      typeLabel: u.type_label,
+      monthlyRate: Number(u.monthly_rate ?? 0),
+      status: u.status,
+      listingId: u.listing_id ?? null,
+    })),
+  };
+}
