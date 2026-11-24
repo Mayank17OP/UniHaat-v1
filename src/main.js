@@ -68,14 +68,23 @@ function runCounter(el) {
   const target = +el.dataset.count, pre = el.dataset.prefix || "", suf = el.dataset.suffix || "";
   const decimals = +(el.dataset.decimals || 0);
   const t0 = performance.now(), dur = 1400;
-  const tick = (t) => {
-    // The first rAF timestamp can predate t0 (the callback's timestamp is the
-    // frame's start, which may predate when we asked for the frame), which
-    // would ease past 0 and briefly render a negative number. Clamp both
-    // ends of the progress.
-    const p = Math.max(0, Math.min(1, (t - t0) / dur));
+  let last = 0;
+  const tick = () => {
+    // Elapsed time is read from the clock *inside* the callback, never from
+    // the timestamp requestAnimationFrame hands over. That timestamp is the
+    // frame's start time, which can predate the moment the counter began —
+    // the original bug, which eased past zero and briefly painted a negative
+    // number ("-10,598 verified students") on the deployed page.
+    //
+    // Three guarantees, so no clock behaviour can produce a negative:
+    //   1. progress is clamped to [0, 1];
+    //   2. progress never moves backwards, even if the clock does;
+    //   3. the rendered number itself is clamped to [0, target].
+    const p = Math.max(last, Math.min(1, Math.max(0, (performance.now() - t0) / dur)));
+    last = p;
     const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = pre + (target * eased).toLocaleString("en-IN", {
+    const value = Math.min(target, Math.max(0, target * eased));
+    el.textContent = pre + value.toLocaleString("en-IN", {
       minimumFractionDigits: decimals, maximumFractionDigits: decimals,
     }) + suf;
     if (p < 1) requestAnimationFrame(tick);

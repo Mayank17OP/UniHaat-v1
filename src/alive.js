@@ -162,10 +162,17 @@ export function rollNumber(el, to, { prefix = "", suffix = "", duration = 700 } 
     return;
   }
   const t0 = performance.now();
-  const tick = (t) => {
-    const p = Math.min(1, (t - t0) / duration);
+  let last = 0;
+  const tick = () => {
+    // Read the clock inside the callback rather than trusting the timestamp
+    // requestAnimationFrame passes in — that one is the frame's start time
+    // and can predate t0, which eased past zero and painted a negative
+    // number. Clamp the progress and the rendered value.
+    const p = Math.max(last, Math.min(1, Math.max(0, (performance.now() - t0) / duration)));
+    last = p;
     const eased = 1 - Math.pow(1 - p, 4);
-    el.textContent = prefix + Math.round(from + (to - from) * eased).toLocaleString("en-IN") + suffix;
+    const value = Math.min(to, Math.max(0, Math.round(from + (to - from) * eased)));
+    el.textContent = prefix + value.toLocaleString("en-IN") + suffix;
     if (p < 1) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);

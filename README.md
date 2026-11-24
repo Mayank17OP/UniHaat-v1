@@ -94,11 +94,11 @@ row mapping, mobile overflow, clipped-control detection and the mobile menu.
 layer: the PKCE authorize URL, the consent-screen behaviour, the landing, the college
 picker, a denied sign-in, and the profile menu's position.
 
-3 tests in `tests/counters.spec.js` cover the stat counters: they never paint a negative
-number, they survive a frame timestamp that predates their start, and they settle on the
-exact target value.
+4 tests in `tests/counters.spec.js` cover the stat counters: they never paint a negative
+number, they survive a frame timestamp that predates their start, they survive a clock
+that jumps backwards mid-animation, and they settle on the exact target value.
 
-That is 35 tests in total.
+That is 36 tests in total.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.
@@ -109,6 +109,11 @@ The frontend is a static site. `scripts/build.mjs` copies it into `dist/` and ge
 `src/config.js` from `SUPABASE_URL` and `SUPABASE_ANON_KEY`, so a deployment can be pointed
 at a different Supabase project without touching the source. `vercel.json` pins the build
 command, the output directory and the cache/security headers.
+
+The build also stamps a content hash onto every module reference — the `<script>` tag in
+`index.html` and every relative import inside the module graph — so a new build can never
+be shadowed by a browser or CDN that still holds the previous copy. Without this, a fixed
+bug can stay live on the deployed site after the fix has been merged and deployed.
 
 ```bash
 SUPABASE_URL=https://<ref>.supabase.co \

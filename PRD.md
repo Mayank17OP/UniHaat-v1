@@ -299,7 +299,7 @@ Supporting: listings/week, demand match rate, median time-to-sell, wishlist→bu
 ## 15. Acceptance Criteria (v1 Prototype)
 
 All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`,
-`tests/oauth.spec.js` and `tests/counters.spec.js` (35 tests, all passing). See §16 for the
+`tests/oauth.spec.js` and `tests/counters.spec.js` (36 tests, all passing). See §16 for the
 verification record.
 
 - [x] Browse/search/filter/sort 14 realistic listings; wishlist persists across reload.
@@ -525,12 +525,24 @@ The backend is the Supabase project above. Migrations `0001`–`0007` are applie
   and the status pill reads *Local* rather than breaking.
 - **Illustrations** are hand-authored line art in the brand palette rather than stock photos,
   which keeps the prototype offline-capable and visually consistent with the type system.
-- **Stat counters clamp their progress.** The count-up reads the animation frame's timestamp,
-  which on the first frame can predate the moment the counter started. Unclamped, that eased
-  past zero and briefly painted a negative number — "-10,598 verified students" showed up
-  on the deployed page. The progress is now clamped at both ends, and
-  `tests/counters.spec.js` reproduces the ordering deliberately so the regression cannot
-  come back.
+- **Stat counters read the clock inside the callback.** The count-up used to derive its
+  progress from the timestamp `requestAnimationFrame` hands over. That timestamp is the
+  *frame's start time*, and it can predate the moment the counter began — so the eased
+  progress went negative and the page briefly painted "-10,598 verified students". The
+  counter now reads `performance.now()` inside the callback, and three independent guards
+  make a negative impossible: progress is clamped to `[0, 1]`, progress can never move
+  backwards, and the rendered number itself is clamped to `[0, target]`.
+  `tests/counters.spec.js` reproduces both failure modes deliberately (a frame timestamp
+  that predates the start, and a clock that jumps backwards mid-animation) and fails
+  against the old implementation.
+
+  **Deploys could not reach the fix.** The counter was fixed and deployed, yet the live
+  page kept rendering the old behaviour — the browser was still running the previous
+  build's `main.js`, because the module URL had not changed and the old copy was still
+  in the HTTP cache. The build now stamps a content hash onto every module reference
+  (`./src/main.js?v=<hash>`) *and* onto every relative import inside the module graph,
+  so a new build can never be shadowed by a cached one. The same fix was applied to
+  `rollNumber()` in `src/alive.js`, which had the identical flaw.
 
 ### The motion layer (`src/alive.js`)
 Motion is treated as a response to input rather than decoration. Every primitive animates
