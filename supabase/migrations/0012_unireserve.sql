@@ -809,10 +809,13 @@ begin
   v_after := public.reserve_scope_available(v_scope);
   v_safe  := public.reserve_safe_sequence(v_after, v_scope);
 
+  -- The log row carries the reservation's own demo flag. Without it, a
+  -- release inside the demonstration sandbox would leave a live-looking
+  -- entry in the public reservation log.
   insert into public.reserve_reservation_logs
-    (reservation_id, user_id, event, decision, reason, allocation, available, safe_sequence)
+    (reservation_id, user_id, event, decision, reason, allocation, available, safe_sequence, is_demo)
   values
-    (p_reservation, v_row.user_id, 'released', 'released', v_new_status::text, v_alloc, v_after, v_safe -> 'sequence');
+    (p_reservation, v_row.user_id, 'released', 'released', v_new_status::text, v_alloc, v_after, v_safe -> 'sequence', v_row.is_demo);
 
   -- A unit came back. Whoever was waiting for one gets another turn —
   -- but only on the live campus; the demonstration sandbox keeps to itself.

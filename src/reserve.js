@@ -758,14 +758,38 @@ function renderVector() {
 }
 
 function renderSequence() {
-  const seq = dashboard?.safe_sequence ?? [];
+  // The two engines hand the sequence over in different shapes. The
+  // server sends `safe_sequence` as a list of ids, which the mapper in
+  // persistence.js turns into {id, label}; the device sends bare ids.
+  // Read both, and label a bare id from the reservation it belongs to,
+  // so the two engines show the same thing.
+  const raw = dashboard?.safeSequence ?? dashboard?.safe_sequence ?? [];
+  const byId = new Map((dashboard?.reservations ?? []).map((r) => [r.id, r]));
+  const labelFor = (id) => {
+    const r = byId.get(id);
+    if (!r) return String(id ?? "").slice(0, 8);
+    const held = Object.entries(r.allocation || {})
+      .map(([slug, n]) => `${n} ${slug}`)
+      .join(", ");
+    return held || "waiting";
+  };
+  const seq = raw.map((s) =>
+    typeof s === "string" ? { id: s, label: labelFor(s) } : s
+  );
+
   const el = $("#reserveSequence");
   if (!seq.length) {
-    el.innerHTML = `<li class="fine reserve-empty">No safe sequence — the campus cannot complete every reservation right now.</li>`;
+    // An empty sequence is not the same as an unsafe campus. With nothing
+    // waiting, every reservation can still finish — the sequence is
+    // simply empty. Saying the campus is unsafe then would be a lie.
+    el.innerHTML =
+      dashboard?.safe === false
+        ? `<li class="fine reserve-empty">No safe sequence — the campus cannot complete every reservation right now.</li>`
+        : `<li class="fine reserve-empty">Nothing is waiting — the campus can complete every reservation right now.</li>`;
     return;
   }
   el.innerHTML = seq
-    .map((s, i) => `<li><span class="mono reserve-seq-n">${i + 1}</span> ${esc(s.label)}</li>`)
+    .map((s, i) => `<li><span class="mono reserve-seq-n">${i + 1}</span> ${esc(s.label ?? labelFor(s.id))}</li>`)
     .join("");
 }
 

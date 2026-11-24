@@ -420,6 +420,49 @@ begin
           '{}'::jsonb);
 end $$;
 
+-- And a campus added later is on the list, with its own domain.
+--
+-- The list is data: a college joins it by giving the table a row. A
+-- student whose campus was added must be able to open an account, and
+-- the account must land on that campus.
+do $$
+declare
+  v_college uuid;
+begin
+  select c.id into v_college
+    from public.colleges c
+   where public.college_for_domain('delhitechnicalcampus.ac.in') = c.id;
+
+  if v_college is null then
+    raise exception 'Delhi Technical Campus does not resolve to a college';
+  end if;
+
+  -- It has to resolve to exactly one college, or the account would have
+  -- no single campus to belong to.
+  if (select count(*) from public.colleges c
+        where public.college_for_domain('delhitechnicalcampus.ac.in') = c.id) <> 1 then
+    raise exception 'Delhi Technical Campus resolves to more than one college';
+  end if;
+
+  -- Which means an account on that address can be opened.
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                          email_confirmed_at, created_at, updated_at, raw_app_meta_data,
+                          raw_user_meta_data)
+  values ('00000000-0000-0000-0000-000000000000',
+          gen_random_uuid(), 'authenticated', 'authenticated',
+          'regression.student@delhitechnicalcampus.ac.in', crypt('campus-life-1', gen_salt('bf')),
+          now(), now(), now(),
+          '{"provider":"email","providers":["email"]}'::jsonb,
+          '{}'::jsonb);
+
+  -- And the campus comes off the address, not from a claim.
+  if not exists (select 1 from public.profiles p
+                  where p.email = 'regression.student@delhitechnicalcampus.ac.in'
+                    and p.college_id = v_college) then
+    raise exception 'the account was not given to the campus its address belongs to';
+  end if;
+end $$;
+
 -- And a campus sub-domain belongs to the same college as its parent.
 do $$
 declare

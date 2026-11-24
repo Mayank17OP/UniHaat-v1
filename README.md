@@ -41,13 +41,19 @@ one of the colleges. The rule is enforced **in the database**, not in the form:
 |---|---|
 | **Where** | `guard_college_email()` — a `BEFORE INSERT` trigger on `auth.users`, plus `BEFORE UPDATE OF email` so an account cannot be moved onto a personal address |
 | **What it covers** | Password sign-up, Google sign-up, accounts created from the admin API, and a later email change |
-| **The list** | `colleges.email_domain` — DTU `dtu.ac.in`, DU `du.ac.in`, Hansraj `hansrajcollege.ac.in`, IIT Delhi `iitd.ac.in`, Jamia `jmi.ac.in`, Amity `amity.edu`, IPU `ipu.ac.in`, NSUT `nsut.ac.in` |
+| **The list** | `colleges.email_domain` — DTU `dtu.ac.in`, DU `du.ac.in`, Hansraj `hansrajcollege.ac.in`, IIT Delhi `iitd.ac.in`, Jamia `jmi.ac.in`, Amity `amity.edu`, IPU `ipu.ac.in`, NSUT `nsut.ac.in`, Delhi Technical Campus `delhitechnicalcampus.ac.in` |
 | **Sub-domains** | A campus sub-domain counts as its parent college (`gn.amity.edu` is Amity). The dot is the boundary, so `notdtu.ac.in` is nobody's |
 | **The campus** | `handle_new_user()` reads the college off the address, so a student cannot put themselves on another campus |
 
 The browser checks the same list before it makes a request — `src/college-email.js` holds the
 matcher, and the list itself is fetched from `colleges.email_domain` so the two cannot drift
 apart. The frontend check is a courtesy; the trigger is the rule.
+
+The list is **data**: a college joins it by giving `colleges` a row with its mail domain —
+no migration, no redeploy. The sign-up picker is filled from that same list, so a campus
+added to the database appears in the form. On **sign-in** the browser does not judge the
+address at all: the server knows whether the account exists, and a list that is a copy
+must never be able to lock a student out of it.
 
 ### Student verification
 
@@ -148,11 +154,18 @@ names the seller's foreign key (PostgREST cannot resolve it on its own, because
 `wishlists` reaches `profiles` through the same two tables), and a live listing replaces
 its offline twin instead of being shown next to it.
 
-7 tests in `tests/college-email.spec.js` cover the admission rule on the browser side: a
-personal address is refused on sign-up **and** on sign-in without reaching the network, a
-lookalike domain (`notdtu.ac.in`) is nobody's, a college address does reach the server,
-the campus follows the address (including a campus sub-domain), the app asks the server
-which addresses it accepts, and a Google account that is not a college account is told why.
+9 tests in `tests/college-email.spec.js` cover the admission rule on the browser side: a
+personal address is refused on sign-up without reaching the network, a lookalike domain
+(`notdtu.ac.in`) is nobody's, a college address does reach the server, the campus follows
+the address (including a campus sub-domain), the app asks the server which addresses it
+accepts, and a refused Google account is told why without blaming the student.
+
+Sign-in is decided by the **server**, not by the browser's copy of the college list: the
+list is a copy, it can be behind the database, and a campus added there yesterday would
+be missing from it — so it must never be allowed to lock a student out of an account the
+server would open. The browser still adds the rule on top, because when an address is not
+one of ours no account can exist for it, and that is the more useful thing to say than
+"wrong password".
 
 9 tests in `tests/unireserve.spec.js` cover UniReserve: the section and its tagline,
 the dashboard's six counters, a safe reservation being approved with its allocation
@@ -161,7 +174,13 @@ reservation giving its resources back, the safe sequence being shown and changin
 an allocation, the four worked examples running, the reservation log recording the
 decision, and the catalogue listing every rentable kind of thing.
 
-That is 60 tests in total.
+5 tests in `tests/reserve-engine.spec.js` cover which engine decided and what it decided:
+when the RPCs answer the site says the server did it and shows the server's numbers, when
+they cannot be reached it says the device did it and still works, the safe sequence the
+database returned reaches the page, an idle campus does not claim to be unsafe, and a
+campus that really cannot complete every reservation still says so.
+
+That is 67 tests in total.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.
@@ -199,7 +218,7 @@ and then runs each suite:
 | --- | --- |
 | `supabase/tests/security_regression.sql` | The privilege surface, the admission rule, the evidence rule, and the review aggregate |
 | `supabase/tests/unireserve_regression.sql` | The UniReserve vectors, approval, hold, block, safety, safe sequence, release, the queue, ownership isolation, the grants and the four demonstrations |
-| `supabase/tests/unireserve_backend.test.mjs` | 70 checks that drive the real functions over real data, including concurrent requests that must not over-allocate |
+| `supabase/tests/unireserve_backend.test.mjs` | 73 checks that drive the real functions over real data, including concurrent requests that must not over-allocate |
 | `supabase/tests/migration_landing.test.mjs` | The UniReserve migration applied to a campus that already has data: the rentals that were already on the marketplace join the pool, and a re-run cannot double the stock |
 
 `supabase/tests/local_harness.sql` stands in for Supabase. It matters that it

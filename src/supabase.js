@@ -130,9 +130,21 @@ export async function signUp({ email, password, fullName, college }) {
 export async function signIn({ email, password }) {
   const supa = getClient();
   if (!supa) throw new Error("Supabase is not configured for this deployment.");
-  assertCollegeEmail(email);
   const { data, error } = await supa.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+  if (error) {
+    // The server has the last word on sign-in: it knows whether the
+    // account exists. The browser's list of college domains is only a
+    // hint — it is a copy, it can be behind the database, and a college
+    // added there yesterday would be missing from it — so it must never
+    // be allowed to lock a student out of an account the server would
+    // open without complaint.
+    //
+    // When the address is not one of ours, though, no account can exist
+    // for it: the sign-up guard refuses those. So that is the more
+    // useful thing to say than "wrong password".
+    if (!isCollegeEmail(email)) throw new Error(collegeEmailRequiredMessage(email));
+    throw error;
+  }
   session = data.session;
   mode = session ? "live" : "local";
   return data;
