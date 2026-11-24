@@ -19,6 +19,7 @@ import {
   initTilt, initTypeReveal, initLiveDots, showSkeletons, hideSkeletons,
 } from "./alive.js";
 import { initReserve } from "./reserve.js";
+import { initUniMail, triggerUniMailNotification } from "./unimail.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -766,6 +767,7 @@ updateLocationUI();
 /* ---------- Init ---------- */
 renderGrid(); renderDemands(); renderSmart(); newSwapCode();
 initReserve({ toast, listings: products });
+initUniMail({ toast });
 initScrollProgress();
 initMagnetic();
 initTypeReveal("[data-reveal-type]");

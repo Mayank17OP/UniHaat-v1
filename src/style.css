@@ -666,3 +666,28 @@ input[type=range]{accent-color:var(--accent);width:100%}
 @media(max-width:720px){
   .header-loc-btn{padding:6px 10px;font-size:12px;max-width:135px}
 }
+
+/* UniMail — DNS & SMTP Infrastructure */
+.unimail-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.unimail-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+.unimail-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px}
+.unimail-card h3{margin-top:0}
+.unimail-card label{display:block;font-size:13px;font-weight:700;margin:12px 0 6px}
+.unimail-card input{width:100%;border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;background:var(--paper)}
+.unimail-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.unimail-row input{flex:1;min-width:160px;margin:0}
+.unimail-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
+.unimail-kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+.unimail-kpi strong{display:block;font-size:22px;font-family:var(--font-d)}
+.unimail-kpi span{font-size:12px;color:var(--muted)}
+.unimail-table-wrap{overflow-x:auto}
+.unimail-table{width:100%;border-collapse:collapse;font-size:13px}
+.unimail-table th,.unimail-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+.unimail-log-list{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:8px;font-size:13px}
+.unimail-log-list li{padding:8px 10px;background:var(--paper);border-radius:10px;border:1px solid var(--line)}
+.unimail-log-list small{display:block;color:var(--muted);margin-top:4px}
+.unimail-dns-box{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;line-height:1.6}
+.unimail-flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+.unimail-flow span{background:var(--green-soft);color:var(--green);border:1px solid var(--green);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700}
+.unimail-flow i{font-style:normal;color:var(--muted);font-weight:700}
+.unimail-concepts{display:grid;gap:8px;font-size:13px;line-height:1.5}
