@@ -70,7 +70,7 @@ h3{font-size:22px;font-weight:700}
 .nav{position:sticky;top:0;z-index:60;background:rgba(255,249,240,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .nav-in{display:flex;align-items:center;gap:20px;padding-top:14px;padding-bottom:14px}
 /* The nav carries more rows than the content, so it gets its own measure */
-.nav .nav-in{max-width:1660px}
+.nav .nav-in{max-width:1860px}
 /* Anchor targets must clear the sticky nav */
 section[id],main [id]{scroll-margin-top:92px}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
@@ -117,19 +117,27 @@ section[id],main [id]{scroll-margin-top:92px}
    specificity of their own, so an override that appears earlier in the
    sheet would lose to a plain class rule declared later. */
 /*
-   The nav names eight sections, and with the logo and the buttons on
-   either side of them it needs about 1600px of page. The tagline goes
+   The nav names nine sections, and with the logo and the buttons on
+   either side of them it needs about 1830px of page. The numbers below
+   come from measuring the row, not from guessing: the tagline goes
    first when the header is crowded, then the links are tightened, and
-   below 1420px they give way to the menu button. None of that is
+   below 1640px they give way to the menu button. None of that is
    allowed to push the sign-in button off the side of the page, which
    is what an unwrapped flex row does.
+
+   The location toggle and the connection pill give way next, one after
+   the other, and the menu carries the location control instead.
 */
-@media(max-width:1600px){.logo-tag{display:none}}
-@media(max-width:1500px) and (min-width:1421px){
+@media(max-width:1830px){.logo-tag{display:none}}
+@media(max-width:1830px) and (min-width:1641px){
   .nav-links{gap:12px}
   .nav-links a{font-size:13px}
 }
-@media(max-width:1420px){.nav-links{display:none}.hamburger{display:flex}}
+@media(max-width:1640px){.nav-links{display:none}.hamburger{display:flex}}
+@media(max-width:900px){
+  /* The connection pill is a decoration. It is the first thing to go. */
+  #syncPill{display:none}
+}
 @media(max-width:640px){
   /* Keep the nav on one line: drop the long CTA labels, keep the icons */
   .nav-in{gap:10px}
@@ -231,6 +239,11 @@ section[id],main [id]{scroll-margin-top:92px}
 .pill{border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;transition:all .2s var(--ease-out)}
 .pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .select-wrap select{border:1px solid var(--line-2);border-radius:999px;padding:10px 14px;background:#fff;font-weight:600}
+/* A select is as wide as its longest option, and one of the college
+   names is long. Without this the option text sets the width of the
+   whole toolbar and the row runs off a narrow phone. */
+.select-wrap{min-width:0}
+.select-wrap select{max-width:100%}
 .results-meta{font-family:var(--font-m);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:18px 2px 12px}
 
 /* Product grid */
@@ -667,3 +680,46 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .dist-chip svg{flex-shrink:0}
 .dist-chip.near{background:var(--green);border-color:var(--green);color:#fff}
 .card-meta .dist{font-weight:700;color:var(--ink)}
+
+/* Header location button — visible before login/signup */
+.header-loc-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:7px 13px;font-weight:700;font-size:13px;color:var(--ink);white-space:nowrap;max-width:190px;transition:transform .18s var(--ease-spring),border-color .2s,background .2s}
+.header-loc-btn span{overflow:hidden;text-overflow:ellipsis}
+.header-loc-btn:hover{border-color:var(--ink);transform:translateY(-1px)}
+.header-loc-btn:active{transform:scale(.97)}
+.header-loc-btn.set{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+.header-loc-btn.set svg{color:var(--green)}
+@media(max-width:720px){
+  .header-loc-btn{padding:6px 10px;font-size:12px;max-width:135px}
+}
+/* Below this the header has no room for it, and the menu carries the
+   location control instead. The override sits here, after the base
+   rule, because a media query carries no specificity of its own: a
+   base rule declared later would silently win. */
+@media(max-width:1000px){
+  .header-loc-btn{display:none}
+}
+
+/* UniMail — DNS & SMTP Infrastructure */
+.unimail-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.unimail-two{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px}
+.unimail-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px}
+.unimail-card h3{margin-top:0}
+.unimail-card label{display:block;font-size:13px;font-weight:700;margin:12px 0 6px}
+.unimail-card input{width:100%;border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;background:var(--paper)}
+.unimail-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.unimail-row input{flex:1;min-width:160px;margin:0}
+.unimail-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
+.unimail-kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+.unimail-kpi strong{display:block;font-size:22px;font-family:var(--font-d)}
+.unimail-kpi span{font-size:12px;color:var(--muted)}
+.unimail-table-wrap{overflow-x:auto}
+.unimail-table{width:100%;border-collapse:collapse;font-size:13px}
+.unimail-table th,.unimail-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
+.unimail-log-list{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:8px;font-size:13px}
+.unimail-log-list li{padding:8px 10px;background:var(--paper);border-radius:10px;border:1px solid var(--line)}
+.unimail-log-list small{display:block;color:var(--muted);margin-top:4px}
+.unimail-dns-box{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;line-height:1.6}
+.unimail-flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 16px}
+.unimail-flow span{background:var(--green-soft);color:var(--green);border:1px solid var(--green);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700}
+.unimail-flow i{font-style:normal;color:var(--muted);font-weight:700}
+.unimail-concepts{display:grid;gap:8px;font-size:13px;line-height:1.5}

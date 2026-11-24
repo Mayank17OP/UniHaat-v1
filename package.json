@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "python3 -m http.server 5173 --bind 0.0.0.0",
+    "dev:unimail": "node server/unimail.mjs",
     "setup:browser": "node scripts/setup-browser.mjs",
     "setup:assets": "node scripts/make-assets.mjs && node scripts/make-fonts.mjs && node scripts/vendor-supabase.mjs",
     "setup:google": "node scripts/configure-google-auth.mjs",
@@ -13,10 +14,12 @@
     "test:db": "node scripts/test-database.mjs",
     "test:engine": "node scripts/engine-check.mjs && node scripts/optimality-check.mjs",
     "test:overflow": "node scripts/overflow-check.mjs",
-    "test:probes": "node scripts/migration-probes.mjs --prepare"
+    "test:probes": "node scripts/migration-probes.mjs --prepare",
+    "test:unimail": "node --test tests/unimail.test.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.58.0"
+    "@supabase/supabase-js": "^2.58.0",
+    "nodemailer": "^10.6.1"
   },
   "devDependencies": {
     "@fontsource/fraunces": "^5.2.5",

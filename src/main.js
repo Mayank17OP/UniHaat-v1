@@ -23,6 +23,7 @@ import {
   initUniCompress, compressFile, storeListingImage, formatBytes,
   hydrateCompressedImages,
 } from "./unicompress.js";
+import { initUniMail, triggerUniMailNotification } from "./unimail.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -31,7 +32,7 @@ const fmt = (n) => "₹" + Number(n).toLocaleString("en-IN");
 let products = [...PRODUCTS];
 let demands = [...DEMANDS];
 let wishlist = new Set(JSON.parse(localStorage.getItem("uh-wishlist") || "[]"));
-let state = { q: "", type: "all", cat: "all", scope: "all", sort: "distance", radius: "all" };
+let state = { q: "", type: "all", cat: "all", college: "all", scope: "all", sort: "distance", radius: "all" };
 let userLocation = getStoredLocation();
 let verified = localStorage.getItem("uh-verified") === "1";
 let signedIn = false;
@@ -128,6 +129,9 @@ $("#catsRow").innerHTML = CATEGORIES.map((c) => {
   return `<button class="cat-btn" data-cat="${c.id}">${iconSvg(c.icon)}<span>${c.label}</span><small>${n} listings</small></button>`;
 }).join("");
 $("#catSelect").innerHTML = `<option value="all">All categories</option>` + CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+if ($("#collegeFilter")) {
+  $("#collegeFilter").innerHTML = `<option value="all">All colleges</option>` + COLLEGES.map((c) => `<option value="${c.short}">${c.short} · ${c.label}</option>`).join("");
+}
 $("#spCat").innerHTML = CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
 $("#sellCat").innerHTML = CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
 $("#demandCat").innerHTML = `<option value="">Select category</option>` + CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
@@ -148,8 +152,17 @@ function filtered() {
   let list = products.filter((p) => {
     if (state.type !== "all" && p.type !== state.type) return false;
     if (state.cat !== "all" && p.category !== state.cat) return false;
+    if (state.college !== "all") {
+      const col = COLLEGES.find((c) => c.short === state.college);
+      const pCol = String(p.college || "").trim().toLowerCase();
+      const targetShort = state.college.toLowerCase();
+      const targetLabel = col ? col.label.toLowerCase() : "";
+      const exactShort = pCol === targetShort || pCol.startsWith(targetShort + ",") || pCol.startsWith(targetShort + " ");
+      const exactLabel = targetLabel && (pCol === targetLabel || pCol.includes(targetLabel));
+      if (!exactShort && !exactLabel) return false;
+    }
     if (state.scope !== "all" && p.scope !== state.scope) return false;
-    if (state.q && !(p.title + " " + p.desc + " " + p.category).toLowerCase().includes(state.q.toLowerCase())) return false;
+    if (state.q && !(p.title + " " + p.desc + " " + p.category + " " + p.college).toLowerCase().includes(state.q.toLowerCase())) return false;
     return true;
   });
   if (userLocation && state.radius !== "all") {
@@ -205,6 +218,7 @@ function updateWishlistCount() {
 $("#searchInput").addEventListener("input", (e) => { state.q = e.target.value; renderGrid(); });
 $("#sortSelect").addEventListener("change", (e) => { state.sort = e.target.value; renderGrid(); });
 $("#catSelect").addEventListener("change", (e) => { state.cat = e.target.value; syncCatButtons(); renderGrid(); });
+$("#collegeFilter")?.addEventListener("change", (e) => { state.college = e.target.value; renderGrid(); });
 $("#radiusSelect")?.addEventListener("change", (e) => { state.radius = e.target.value; renderGrid(); });
 $$("#typePills .pill").forEach((b) => b.addEventListener("click", () => {
   $$("#typePills .pill").forEach((x) => x.classList.remove("active")); b.classList.add("active");
@@ -340,24 +354,136 @@ $$(".overlay").forEach((o) => o.addEventListener("click", (e) => { if (e.target 
 $$("[data-close]").forEach((b) => b.addEventListener("click", closeOverlays));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeOverlays(); $("#chatDrawer").hidden = true; } });
 
-/* ---------- Chat ---------- */
+/* ---------- Real-Time User-to-User Chat ---------- */
 let chatProduct = null;
-function openChat(p) {
-  chatProduct = p;
-  $("#chatTitle").textContent = p.title;
-  $("#chatSub").textContent = `${p.seller} · ${p.college} · responds in ~1 hr`;
-  $("#chatBody").innerHTML = `<div class="msg them">Hi! Yes, it’s available. Pickup from ${p.college} gate works best. Anything you want to know about condition?</div>`;
-  $("#chatDrawer").hidden = false;
+let activeConversationId = null;
+let unsubscribeChat = null;
+const chatChannel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("unihaat-chat") : null;
+
+function escHtml(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-$("#chatClose").addEventListener("click", () => ($("#chatDrawer").hidden = true));
-function sendChat(text) {
-  if (!text.trim()) return;
-  $("#chatBody").insertAdjacentHTML("beforeend", `<div class="msg me">${text.replace(/</g, "&lt;")}</div>`);
-  $("#chatBody").scrollTop = 99999;
-  setTimeout(() => {
-    $("#chatBody").insertAdjacentHTML("beforeend", `<div class="msg them">Sounds good! Let’s lock it in — I’ll generate the SafeSwap QR once we agree on price &amp; time.</div>`);
-    $("#chatBody").scrollTop = 99999;
-  }, 900);
+
+function getLocalThreadKey(p) {
+  return `conv:${p.id}`;
+}
+
+function readLocalMessages(threadKey) {
+  try {
+    const all = JSON.parse(localStorage.getItem("uh-chat-messages") || "{}");
+    return Array.isArray(all[threadKey]) ? all[threadKey] : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendLocalMessage(threadKey, msg) {
+  try {
+    const all = JSON.parse(localStorage.getItem("uh-chat-messages") || "{}");
+    const list = Array.isArray(all[threadKey]) ? all[threadKey] : [];
+    if (!list.some((m) => m.id === msg.id)) {
+      list.push(msg);
+      all[threadKey] = list;
+      localStorage.setItem("uh-chat-messages", JSON.stringify(all));
+    }
+  } catch { /* ignore storage quota */ }
+}
+
+function renderChatMessages(messages, myId) {
+  const body = $("#chatBody");
+  if (!messages.length) {
+    body.innerHTML = `<p class="fine" style="text-align:center;margin:24px 0">No messages yet. Say hello to start the conversation.</p>`;
+    return;
+  }
+  body.innerHTML = messages.map((m) => {
+    const isMe = myId ? m.sender_id === myId : m.sender === "me";
+    return `<div class="msg ${isMe ? "me" : "them"}">${escHtml(m.body)}</div>`;
+  }).join("");
+  body.scrollTop = body.scrollHeight;
+}
+
+if (chatChannel) {
+  chatChannel.onmessage = (ev) => {
+    const { threadKey, msg } = ev.data || {};
+    if (!threadKey || !msg || !chatProduct) return;
+    if (threadKey === activeConversationId) {
+      appendLocalMessage(threadKey, msg);
+      renderChatMessages(readLocalMessages(threadKey), null);
+    }
+  };
+}
+
+async function openChat(p) {
+  chatProduct = p;
+  if (unsubscribeChat) {
+    unsubscribeChat();
+    unsubscribeChat = null;
+  }
+  $("#chatTitle").textContent = p.title;
+  $("#chatSub").textContent = `${p.seller} · ${p.college} · Direct chat`;
+  $("#chatDrawer").hidden = false;
+
+  const myId = SB.currentUserId();
+  if (signedIn && myId && p.sellerId && p.sellerId !== myId) {
+    try {
+      const conv = await SB.getOrCreateConversation({
+        listingId: p.id,
+        buyerId: myId,
+        sellerId: p.sellerId,
+      });
+      activeConversationId = conv.id;
+      const history = await SB.fetchMessages(conv.id);
+      renderChatMessages(history, myId);
+      unsubscribeChat = SB.subscribeToMessages(conv.id, (newMsg) => {
+        const current = $("#chatBody");
+        const isMe = newMsg.sender_id === myId;
+        if (current.querySelector("p.fine")) current.innerHTML = "";
+        current.insertAdjacentHTML("beforeend", `<div class="msg ${isMe ? "me" : "them"}">${escHtml(newMsg.body)}</div>`);
+        current.scrollTop = current.scrollHeight;
+      });
+      return;
+    } catch (err) {
+      console.warn("[UniHaat] live chat fallback to local:", err?.message);
+    }
+  }
+
+  activeConversationId = getLocalThreadKey(p);
+  renderChatMessages(readLocalMessages(activeConversationId), null);
+}
+
+$("#chatClose").addEventListener("click", () => {
+  $("#chatDrawer").hidden = true;
+  if (unsubscribeChat) {
+    unsubscribeChat();
+    unsubscribeChat = null;
+  }
+});
+
+async function sendChat(text) {
+  const clean = String(text || "").trim();
+  if (!clean || !chatProduct) return;
+  const myId = SB.currentUserId();
+
+  if (signedIn && myId && activeConversationId && !String(activeConversationId).startsWith("conv:")) {
+    try {
+      await SB.sendMessage({ conversationId: activeConversationId, body: clean });
+      triggerUniMailNotification("product_enquiry", { item: chatProduct.title, sender: "A verified student" });
+      return;
+    } catch (err) {
+      toast("Could not send message: " + (err?.message || "network error"));
+      return;
+    }
+  }
+
+  const msg = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    sender: "me",
+    body: clean,
+    created_at: new Date().toISOString(),
+  };
+  appendLocalMessage(activeConversationId, msg);
+  renderChatMessages(readLocalMessages(activeConversationId), null);
+  chatChannel?.postMessage({ threadKey: activeConversationId, msg: { ...msg, sender: "them" } });
 }
 $("#chatForm").addEventListener("submit", (e) => { e.preventDefault(); sendChat($("#chatInput").value); $("#chatInput").value = ""; });
 $$(".chat-quick button").forEach((b) => b.addEventListener("click", () => sendChat(b.dataset.msg)));
@@ -696,13 +822,27 @@ function populateLocationPicker() {
 function updateLocationUI() {
   const chip = $("#locationChip");
   const chipText = $("#locationChipText");
+  const headerBtn = $("#headerLocationBtn");
+  const headerText = $("#headerLocationText");
+  const profileToggle = $("#profileLocationToggle");
+  const mLocBtn = $("#mLocationBtn");
   const hint = $("#locationHint");
   const sub = $("#marketplaceSub");
-  if (!chip || !chipText) return;
   if (userLocation) {
-    chip.classList.add("set");
     const tag = userLocation.short || userLocation.label || "Your location";
-    chipText.textContent = userLocation.source === "device" ? `Near you · ${tag}` : tag;
+    const display = userLocation.source === "device" ? `Near you · ${tag}` : tag;
+    if (chip) chip.classList.add("set");
+    if (chipText) chipText.textContent = display;
+    if (headerBtn) {
+      headerBtn.classList.add("set");
+      headerBtn.setAttribute("aria-pressed", "true");
+    }
+    if (headerText) headerText.textContent = `Location: On · ${tag}`;
+    if (profileToggle) {
+      profileToggle.textContent = `Location: On · ${tag}`;
+      profileToggle.setAttribute("aria-pressed", "true");
+    }
+    if (mLocBtn) mLocBtn.textContent = `Location: ${tag}`;
     if (hint) {
       hint.textContent = userLocation.source === "device"
         ? "Sorted by distance from your current location."
@@ -712,8 +852,18 @@ function updateLocationUI() {
       sub.textContent = `Listings sorted by distance from ${userLocation.label} — closest first.`;
     }
   } else {
-    chip.classList.remove("set");
-    chipText.textContent = "Set your location";
+    if (chip) chip.classList.remove("set");
+    if (chipText) chipText.textContent = "Set your location";
+    if (headerBtn) {
+      headerBtn.classList.remove("set");
+      headerBtn.setAttribute("aria-pressed", "false");
+    }
+    if (headerText) headerText.textContent = "Location: Off";
+    if (profileToggle) {
+      profileToggle.textContent = "Location: Off";
+      profileToggle.setAttribute("aria-pressed", "false");
+    }
+    if (mLocBtn) mLocBtn.textContent = "Set location";
     if (hint) hint.textContent = "Allow location and we’ll sort listings by how close they are. Or pick a campus by hand.";
     if (sub) sub.textContent = "Same college, same university and nearby colleges — sorted by distance. Every listing shows a SmartPrice verdict.";
   }
@@ -777,7 +927,34 @@ async function handleDeviceLocationRequest({ fromPrompt = false } = {}) {
   }
 }
 
-$("#locationChip")?.addEventListener("click", () => openLocationPicker());
+function onLocationTrigger() {
+  if (!userLocation) {
+    handleDeviceLocationRequest({ fromPrompt: false });
+  } else {
+    openLocationPicker();
+  }
+}
+
+$("#headerLocationBtn")?.addEventListener("click", onLocationTrigger);
+$("#profileLocationToggle")?.addEventListener("click", () => {
+  if (!userLocation) {
+    handleDeviceLocationRequest({ fromPrompt: false });
+  } else {
+    userLocation = null;
+    clearStoredLocation();
+    if (signedIn) persistClearLocation();
+    state.radius = "all";
+    if ($("#radiusSelect")) $("#radiusSelect").value = "all";
+    updateLocationUI();
+    renderGrid();
+    toast("Location turned off");
+  }
+});
+$("#mLocationBtn")?.addEventListener("click", () => {
+  $("#mobileMenu")?.classList.remove("open");
+  onLocationTrigger();
+});
+$("#locationChip")?.addEventListener("click", onLocationTrigger);
 $("#locationAllowBtn")?.addEventListener("click", () => handleDeviceLocationRequest({ fromPrompt: true }));
 $("#locationManualBtn")?.addEventListener("click", () => {
   markLocationPromptHandled();
@@ -827,6 +1004,7 @@ updateLocationUI();
 renderGrid(); renderDemands(); renderSmart(); newSwapCode();
 initReserve({ toast, listings: products });
 initUniCompress({ toast });
+initUniMail({ toast });
 initScrollProgress();
 initMagnetic();
 initTypeReveal("[data-reveal-type]");

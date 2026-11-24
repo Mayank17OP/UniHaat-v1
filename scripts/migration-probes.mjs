@@ -245,7 +245,7 @@ const probes = [
     },
   },
   {
-    migration: "0014",
+    migration: "0016",
     name: "the UniCompress tables exist and force row level security",
     async check(client) {
       const { rows } = await client.query(`
@@ -266,7 +266,7 @@ const probes = [
     },
   },
   {
-    migration: "0014",
+    migration: "0016",
     name: "the UniCompress functions are server-side only",
     async check(client) {
       const { rows } = await client.query(`
@@ -394,7 +394,7 @@ async function checkMigrationEarnsItsPlace() {
   const omissions = [
     "0007_transaction_terminal_state.sql",
     "0012_unireserve.sql",
-    "0014_unicompress.sql",
+    "0016_unicompress.sql",
   ];
 
   console.log("\neach migration earns its place");
@@ -402,8 +402,13 @@ async function checkMigrationEarnsItsPlace() {
   for (const file of omissions) {
     // The probes that belong to the migration being left out. They are
     // the ones that have to stop working without it.
-    const tag = file.slice(0, 4);
-    const belonging = probes.filter((probe) => probe.migration === tag);
+    //
+    // The tag is matched against the file's whole name, not the first
+    // four characters: two migrations can share a number — there is a
+    // `0013_college_...` and a `0013_location_...` — and a short tag
+    // would pick up the wrong one's probes.
+    const stem = file.replace(/\.sql$/, "");
+    const belonging = probes.filter((probe) => stem.startsWith(probe.migration));
     if (!belonging.length) continue;
 
     const client = await build(file);

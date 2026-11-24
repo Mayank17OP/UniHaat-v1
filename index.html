@@ -40,6 +40,7 @@
         <a href="#safeswap">SafeSwap</a>
         <a href="#unireserve">UniReserve</a>
         <a href="#unicompress">UniCompress</a>
+        <a href="#unimail">UniMail</a>
         <a href="#impact">UniImpact</a>
       </nav>
       <div class="nav-actions">
@@ -56,14 +57,19 @@
         <span class="sync-pill" id="syncPill" data-state="local" title="Data connection status">
           <i class="live-dot"></i><span id="syncText">Local</span>
         </span>
+        <button class="header-loc-btn" id="headerLocationBtn" type="button" title="Toggle location On/Off for nearby discovery" aria-haspopup="dialog" aria-pressed="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="headerLocationText">Location: Off</span>
+        </button>
         <button class="avatar" id="avatarBtn" aria-label="Your profile" aria-haspopup="true" aria-expanded="false" hidden>A</button>
         <button class="hamburger" id="menuBtn" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
       </div>
     </div>
     <div class="mobile-menu" id="mobileMenu">
       <a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#unireserve">UniReserve</a>
-        <a href="#unicompress">UniCompress</a><a href="#impact">UniImpact</a>
+        <a href="#unicompress">UniCompress</a><a href="#unimail">UniMail</a><a href="#impact">UniImpact</a>
       <div class="mobile-actions">
+        <button class="btn btn-ghost" id="mLocationBtn" type="button">Set location</button>
         <button class="btn btn-ghost" id="mVerifyBtn" type="button">Verify student</button>
         <button class="btn btn-primary" id="mSellBtn" type="button">+ Sell an item</button>
       </div>
@@ -88,6 +94,7 @@
         <div><strong id="menuRating">—</strong><span>rating</span></div>
         <div><strong id="menuSaved">0</strong><span>saved</span></div>
       </div>
+      <button class="profile-item" id="profileLocationToggle" type="button" aria-pressed="false">Location: Off</button>
       <button class="profile-item" id="menuCollegeBtn" type="button" hidden>Choose your college</button>
       <button class="profile-item" id="menuVerify" type="button">Verify as a student</button>
       <button class="profile-item danger" id="signOutBtn" type="button">Sign out</button>
@@ -193,6 +200,10 @@
         <label class="select-wrap">
           <span class="sr-only">Category</span>
           <select id="catSelect" aria-label="Category"><option value="all">All categories</option></select>
+        </label>
+        <label class="select-wrap">
+          <span class="sr-only">College</span>
+          <select id="collegeFilter" aria-label="College"><option value="all">All colleges</option></select>
         </label>
         <label class="select-wrap">
           <span class="sr-only">Distance</span>
@@ -572,6 +583,18 @@
       </div>
     </section>
 
+    <!-- UNIMAIL -->
+    <section class="section wrap" id="unimail">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">UniMail · DNS &amp; SMTP Infrastructure</p>
+          <h2>Your Campus Identity. One Connected Marketplace.</h2>
+          <p class="sub">Approved institutional domain verification, live DNS &amp; MX inspection, SMTP delivery, and automated marketplace notifications.</p>
+        </div>
+      </div>
+      <div id="unimailRoot"></div>
+    </section>
+
     <!-- UNIIMPACT -->
     <section class="section band" id="impact">
       <div class="wrap">
@@ -729,6 +752,7 @@
           <option value="Amity">Amity University</option>
           <option value="IPU">Indraprastha University</option>
           <option value="NSUT">Netaji Subhas University of Technology</option>
+          <option value="DTC">Delhi Technical Campus (DTC), IP University</option>
         </select></label>
         <label>Student ID<input name="studentId" required placeholder="DTU/2K23/… " /></label>
         <button class="btn btn-primary btn-block" type="submit">Verify me</button>
@@ -787,9 +811,10 @@
   <!-- CHAT DRAWER -->
   <aside class="drawer" id="chatDrawer" aria-label="Chat" hidden>
     <div class="drawer-head">
-      <div><strong id="chatTitle">Chat</strong><p class="fine" id="chatSub">Seller · responds in ~1 hr</p></div>
+      <div><strong id="chatTitle">Chat</strong><p class="fine" id="chatSub">Direct student-to-student chat</p></div>
       <button class="modal-close" id="chatClose" aria-label="Close chat">×</button>
     </div>
+    <div class="chat-inbox" id="chatInbox" hidden></div>
     <div class="chat-body" id="chatBody"></div>
     <form class="chat-form" id="chatForm">
       <input id="chatInput" placeholder="Message… try: Can you do ₹2,200?" aria-label="Message" />

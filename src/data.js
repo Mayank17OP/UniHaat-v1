@@ -19,7 +19,7 @@ export const COLLEGES = [
   { short: "Amity", label: "Amity University", domain: "amity.edu", lat: 28.546, lng: 77.232 },
   { short: "IPU", label: "Indraprastha University", domain: "ipu.ac.in", lat: 28.585, lng: 77.05 },
   { short: "NSUT", label: "Netaji Subhas University of Technology", domain: "nsut.ac.in", lat: 28.61, lng: 77.037 },
-  { short: "DTC", label: "Delhi Technical Campus", domain: "delhitechnicalcampus.ac.in", lat: 28.4744, lng: 77.492 },
+  { short: "DTC", label: "Delhi Technical Campus (DTC), IP University", domain: "delhitechnicalcampus.ac.in", lat: 28.4744, lng: 77.492 },
 ];
 
 export const CATEGORIES = [
@@ -48,6 +48,7 @@ export const PRODUCTS = [
   { id: "p12", title: "LED Table Lamp · Rechargeable", price: 350, original: 899, type: "sell", category: "hostel", condition: "Like new", ageMonths: 3, distance: 0.3, lat: 28.7508, lng: 77.117, college: "DTU", scope: "same", seller: "Aarav S.", rating: 4.9, deals: 12, img: "./assets/lamp.svg", desc: "3 brightness levels, USB rechargeable. Ideal for hostel desk.", accessories: "Lamp + cable", repairs: "None", battery: null, clearance: true, created: 11 },
   { id: "p13", title: "HP Laser Printer · WiFi", price: 2200, original: 6800, type: "sell", category: "electronics", condition: "Fair", ageMonths: 28, distance: 2.1, lat: 28.5855, lng: 77.0505, college: "IP University", scope: "nearby", seller: "Dev P.", rating: 4.7, deals: 15, img: "./assets/printer.svg", desc: "Works fine, toner at 40%. Good for assignments & notes printing.", accessories: "Printer, cable", repairs: "Roller cleaned", battery: null, clearance: false, created: 12 },
   { id: "p14", title: "Hostel Clearance Bundle · Priya's Room", price: 4999, original: 14200, type: "sell", category: "hostel", condition: "Good", ageMonths: 10, distance: 0.6, lat: 28.6772, lng: 77.2062, college: "Hansraj, DU", scope: "same", seller: "Priya N.", rating: 4.9, deals: 9, img: "./assets/bundle.svg", desc: "Mattress + table + chair + lamp + kettle + storage box. One pickup, bundle discount applied.", accessories: "6 items (see list)", repairs: "None", battery: null, clearance: true, created: 13, bundle: true },
+  { id: "p15", title: "Engineering Drawing Kit + Drafter", price: 480, original: 1200, type: "sell", category: "books", condition: "Like new", ageMonths: 4, distance: 0.4, lat: 28.4748, lng: 77.4925, college: "DTC", scope: "nearby", seller: "Karan V.", rating: 4.8, deals: 5, img: "./assets/books.svg", desc: "Mini drafter, compass box, and sheet holder. Pickup near Delhi Technical Campus (DTC) main gate.", accessories: "Drafter, box, holder", repairs: "None", battery: null, clearance: false, created: 14 },
 ];
 
 export const DEMANDS = [

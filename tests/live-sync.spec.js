@@ -16,6 +16,9 @@
 // Supabase client drives the request.
 
 import { test, expect } from "@playwright/test";
+// The offline catalogue, so the count of cards is read from the data
+// rather than written down twice. The catalogue grows; this must not.
+import { PRODUCTS } from "../src/data.js";
 
 const BASE = process.env.BASE_URL || "http://localhost:5173";
 const SB = "https://gzbmqwvybcmxlsgouhyh.supabase.co";
@@ -199,7 +202,9 @@ test("a live listing replaces its offline twin instead of joining it", async ({ 
 
   // And the card shows the live row, which spells the seller out in full.
   await expect(twins.first()).toContainText("Aarav Sharma");
-  await expect(page.locator("#productGrid .card")).toHaveCount(14);
+  // The catalogue is the same size as it was: the live row took the
+  // twin's place rather than adding one.
+  await expect(page.locator("#productGrid .card")).toHaveCount(PRODUCTS.length);
 });
 
 test("a live listing from a seller with no reviews says so, it does not print a perfect score", async ({ page }) => {
