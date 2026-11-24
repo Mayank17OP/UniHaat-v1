@@ -11,6 +11,12 @@
  *   2. A Google OAuth client ID + client secret with this authorised redirect URI:
  *        https://<project-ref>.supabase.co/auth/v1/callback
  *
+ * Note: a Google account only opens a UniHaat account if its address belongs
+ * to a college. The database enforces that (`guard_college_email()` on
+ * `auth.users`), so a Google sign-in on a personal address is refused with
+ * "Database error creating new user" — the app turns that into a message
+ * telling the student to use their college account.
+ *
  * Usage:
  *   SUPABASE_ACCESS_TOKEN=sbp_xxx \
  *   GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com \
