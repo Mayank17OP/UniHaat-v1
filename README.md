@@ -80,11 +80,11 @@ particles, magnetic buttons, word-by-word headline reveal, scroll progress, skel
 npm test          # provisions a headless Chromium, then runs the suite
 ```
 
-21 tests in `tests/unihaat.spec.js`: hero/grid, search, category & type filters, Passport +
+25 tests in `tests/unihaat.spec.js`: hero/grid, search, category & type filters, Passport +
 SafeSwap modal, SmartPrice (incl. condition selector), Demand Board + UniMatch relevance,
 SafeSwap completion, wishlist persistence, sell flow, chat, verification, UniImpact
-counters/bars, auth modal (tabs, Google, validation), sync status, motion layer, mobile
-overflow and the mobile menu.
+counters/bars, auth modal (tabs, Google, validation), sync status, motion layer, Supabase
+row mapping, mobile overflow, clipped-control detection and the mobile menu.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.

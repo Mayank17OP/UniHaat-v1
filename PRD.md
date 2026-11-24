@@ -299,7 +299,7 @@ Supporting: listings/week, demand match rate, median time-to-sell, wishlist→bu
 ## 15. Acceptance Criteria (v1 Prototype)
 
 All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`
-(21 tests, all passing). See §16 for the verification record.
+(25 tests, all passing). See §16 for the verification record.
 
 - [x] Browse/search/filter/sort 14 realistic listings; wishlist persists across reload.
 - [x] Product detail shows Passport, SmartPrice verdict, seller, chat entry, SafeSwap QR.
