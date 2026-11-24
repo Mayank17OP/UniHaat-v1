@@ -25,9 +25,10 @@
 --   6. the safe sequence is a real order
 --   7. finishing a reservation gives the resources back
 --   8. the queue moves on when a unit comes back
---   9. a client cannot write a reservation, an allocation or a log
+--   9. a rental listing joins the pool and leaves it again
 --  10. a student cannot release somebody else's reservation
---  11. the demonstration runs the four worked examples
+--  11. a client cannot write a reservation, an allocation or a log
+--  12. the demonstration runs the four worked examples
 --
 -- Note on the plumbing: psql does not substitute its variables inside a
 -- dollar quoted block, so the values are handed to the anonymous blocks
@@ -592,7 +593,50 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 9. A student cannot release somebody else's reservation.
+-- 9. A rental listing joins the pool, and leaves it again.
+--
+--    The marketplace feeds UniReserve: a listing the seller puts up for
+--    rent is a thing somebody can borrow, and when the listing comes
+--    down the unit goes with it.
+-- ---------------------------------------------------------------------------
+
+reset role;
+
+do $$
+declare
+  v_listing uuid;
+  v_units   int;
+begin
+  insert into public.listings
+    (seller_id, title, description, category_slug, listing_type, price,
+     rent_per_month, status, condition, campus_area, created_at)
+  values
+    (:'student_a'::uuid, 'Regression cycle for rent', 'A good cycle',
+     'sports', 'rent', 0, 350, 'active', 'Good', 'North Campus', now())
+  returning id into v_listing;
+
+  select count(*)::int into v_units
+    from public.reserve_resource_units u
+   where u.listing_id = v_listing;
+
+  if v_units <> 1 then
+    raise exception 'the rental listing did not join the pool: % units', v_units;
+  end if;
+
+  -- When the listing comes down, the unit goes with it.
+  update public.listings set status = 'sold' where id = v_listing;
+
+  select count(*)::int into v_units
+    from public.reserve_resource_units u
+   where u.listing_id = v_listing;
+
+  if v_units <> 0 then
+    raise exception 'the withdrawn listing left the pool: % units', v_units;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 10. A student cannot release somebody else's reservation.
 -- ---------------------------------------------------------------------------
 
 select set_config('request.jwt.claim.sub', :'student_b', true);
@@ -629,7 +673,7 @@ end $$;
 reset role;
 
 -- ---------------------------------------------------------------------------
--- 10. A client cannot write a reservation, an allocation or a log.
+-- 11. A client cannot write a reservation, an allocation or a log.
 -- ---------------------------------------------------------------------------
 
 do $$
@@ -678,7 +722,7 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 11. The demonstration runs the four worked examples.
+-- 12. The demonstration runs the four worked examples.
 -- ---------------------------------------------------------------------------
 
 select set_config('request.jwt.claim.sub', :'student_a', true);
