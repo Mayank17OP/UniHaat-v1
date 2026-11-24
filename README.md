@@ -200,6 +200,7 @@ and then runs each suite:
 | `supabase/tests/security_regression.sql` | The privilege surface, the admission rule, the evidence rule, and the review aggregate |
 | `supabase/tests/unireserve_regression.sql` | The UniReserve vectors, approval, hold, block, safety, safe sequence, release, the queue, ownership isolation, the grants and the four demonstrations |
 | `supabase/tests/unireserve_backend.test.mjs` | 70 checks that drive the real functions over real data, including concurrent requests that must not over-allocate |
+| `supabase/tests/migration_landing.test.mjs` | The UniReserve migration applied to a campus that already has data: the rentals that were already on the marketplace join the pool, and a re-run cannot double the stock |
 
 `supabase/tests/local_harness.sql` stands in for Supabase. It matters that it
 reproduces the way Supabase hands the `public` schema to the client roles — every

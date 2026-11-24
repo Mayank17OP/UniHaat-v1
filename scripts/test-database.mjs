@@ -32,6 +32,10 @@ const SUITES = ["security_regression.sql", "unireserve_regression.sql"];
 // real functions over the real data, including the concurrency checks.
 const BACKEND_SUITE = "unireserve_backend.test.mjs";
 
+// The landing suite checks that the UniReserve migration applies to a
+// campus that already has data — the live database, not a fresh one.
+const LANDING_SUITE = "migration_landing.test.mjs";
+
 async function prepare(client) {
   // A fresh database: the schema, the GoTrue stand-in and the migrations.
   await client.query("drop schema if exists public cascade; create schema public;");
@@ -95,7 +99,7 @@ try {
 }
 await client.end();
 
-const ALL = [...SUITES, BACKEND_SUITE];
+const ALL = [...SUITES, BACKEND_SUITE, LANDING_SUITE];
 
 let failed = 0;
 for (const suite of ALL) {

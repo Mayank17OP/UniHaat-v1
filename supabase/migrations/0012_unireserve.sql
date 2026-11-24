@@ -26,18 +26,24 @@
 -- 1. The model
 -- ---------------------------------------------------------------------------
 
-create type public.reserve_reservation_status as enum (
-  'pending',    -- asked for, waiting for a decision or for a unit
-  'approved',   -- resources allocated, the student has them
-  'active',     -- the rental is under way
-  'completed',  -- the rental finished, the resources are back
-  'cancelled',  -- the student gave it up, the resources are back
-  'blocked',    -- the safety algorithm refused it
-  'expired'     -- the duration ran out, the resources are back
-);
+-- The migration is written so it can be applied again safely: a retry
+-- after a failure must not leave the campus with two of everything.
+do $$
+begin
+  create type public.reserve_reservation_status as enum (
+    'pending',    -- asked for, waiting for a decision or for a unit
+    'approved',   -- resources allocated, the student has them
+    'active',     -- the rental is under way
+    'completed',  -- the rental finished, the resources are back
+    'cancelled',  -- the student gave it up, the resources are back
+    'blocked',    -- the safety algorithm refused it
+    'expired'     -- the duration ran out, the resources are back
+  );
+exception when duplicate_object then null;
+end $$;
 
 -- The kinds of thing that can be reserved.
-create table public.reserve_resource_types (
+create table if not exists public.reserve_resource_types (
   id            uuid primary key default gen_random_uuid(),
   slug          text not null unique,
   label         text not null,
@@ -52,7 +58,7 @@ create table public.reserve_resource_types (
 );
 
 -- A reservation. One row is one process in the algorithm.
-create table public.reserve_reservations (
+create table if not exists public.reserve_reservations (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references public.profiles(id) on delete cascade,
   -- The marketplace listing the student reserved, when they reserved one.
@@ -75,9 +81,9 @@ create table public.reserve_reservations (
   released_at   timestamptz
 );
 
-create index reserve_reservations_user_idx   on public.reserve_reservations (user_id, created_at desc);
-create index reserve_reservations_status_idx on public.reserve_reservations (status);
-create index reserve_reservations_ends_idx   on public.reserve_reservations (ends_at)
+create index if not exists reserve_reservations_user_idx   on public.reserve_reservations (user_id, created_at desc);
+create index if not exists reserve_reservations_status_idx on public.reserve_reservations (status);
+create index if not exists reserve_reservations_ends_idx   on public.reserve_reservations (ends_at)
   where status in ('approved', 'active');
 
 -- The matrix, one row per (reservation, resource type).
@@ -86,7 +92,7 @@ create index reserve_reservations_ends_idx   on public.reserve_reservations (end
 --   requested_units → what the student asked for right now
 --   allocated_units → the Allocation Matrix
 --   need            → max_units − allocated_units
-create table public.reserve_reservation_demands (
+create table if not exists public.reserve_reservation_demands (
   reservation_id   uuid not null references public.reserve_reservations(id) on delete cascade,
   resource_type_id uuid not null references public.reserve_resource_types(id) on delete cascade,
   max_units        int not null default 0 check (max_units >= 0),
@@ -98,7 +104,7 @@ create table public.reserve_reservation_demands (
 );
 
 -- The physical things.
-create table public.reserve_resource_units (
+create table if not exists public.reserve_resource_units (
   id               uuid primary key default gen_random_uuid(),
   resource_type_id uuid not null references public.reserve_resource_types(id) on delete cascade,
   -- The marketplace listing this unit is, when it is one.
@@ -114,12 +120,12 @@ create table public.reserve_resource_units (
   constraint reserve_unit_holder check ((status = 'available') = (reservation_id is null))
 );
 
-create index reserve_units_type_idx        on public.reserve_resource_units (resource_type_id, status);
-create index reserve_units_reservation_idx on public.reserve_resource_units (reservation_id);
+create index if not exists reserve_units_type_idx        on public.reserve_resource_units (resource_type_id, status);
+create index if not exists reserve_units_reservation_idx on public.reserve_resource_units (reservation_id);
 
 -- The audit trail. Every decision is written down: what was asked, what was
 -- available, what was allocated, what the safe sequence was.
-create table public.reserve_reservation_logs (
+create table if not exists public.reserve_reservation_logs (
   id             bigint generated always as identity primary key,
   reservation_id uuid references public.reserve_reservations(id) on delete set null,
   user_id        uuid references public.profiles(id) on delete set null,
@@ -134,8 +140,8 @@ create table public.reserve_reservation_logs (
   created_at     timestamptz not null default now()
 );
 
-create index reserve_logs_created_idx     on public.reserve_reservation_logs (created_at desc);
-create index reserve_logs_reservation_idx on public.reserve_reservation_logs (reservation_id);
+create index if not exists reserve_logs_created_idx     on public.reserve_reservation_logs (created_at desc);
+create index if not exists reserve_logs_reservation_idx on public.reserve_reservation_logs (reservation_id);
 
 -- ---------------------------------------------------------------------------
 -- 2. The vectors
@@ -1086,6 +1092,10 @@ values
 on conflict (slug) do nothing;
 
 -- The units themselves.
+--
+-- The seed is written so it can run twice without doubling the stock: a
+-- migration that is retried must leave the campus with the same number of
+-- cycles, not twice as many.
 insert into public.reserve_resource_units (resource_type_id, label, monthly_rate)
 select rt.id, u.label, u.monthly_rate
   from (values
@@ -1121,7 +1131,14 @@ select rt.id, u.label, u.monthly_rate
     ('instruments',  'Guitar 2',                   700),
     ('instruments',  'Guitar 3',                   700)
   ) as u(slug, label, monthly_rate)
-  join public.reserve_resource_types rt on rt.slug = u.slug;
+  join public.reserve_resource_types rt on rt.slug = u.slug
+ where not exists (
+   select 1
+     from public.reserve_resource_units x
+    where x.resource_type_id = rt.id
+      and x.label = u.label
+      and x.listing_id is null
+ );
 
 -- ---------------------------------------------------------------------------
 -- 9. The Marketplace feeds the pool
@@ -1179,6 +1196,7 @@ begin
 end;
 $$;
 
+drop trigger if exists reserve_listing_unit_sync on public.listings;
 create trigger reserve_listing_unit_sync
   after insert or update of listing_type, category_slug, title, rent_per_month, status or delete
   on public.listings
@@ -1186,7 +1204,24 @@ create trigger reserve_listing_unit_sync
 
 -- One unit per listing, at most. A unit with no listing is a campus
 -- resource, and there can be any number of those.
-create unique index reserve_units_listing_idx on public.reserve_resource_units (listing_id);
+create unique index if not exists reserve_units_listing_idx on public.reserve_resource_units (listing_id);
+
+-- The trigger only sees what happens from here on. The rentals that are
+-- already on the marketplace have to be brought into the pool by hand,
+-- or a student would find a listing they could borrow and no unit behind
+-- it.
+insert into public.reserve_resource_units (resource_type_id, listing_id, label, monthly_rate)
+select rt.id, l.id, l.title, coalesce(l.rent_per_month, 0)
+  from public.listings l
+  join public.reserve_resource_types rt
+    on rt.category_slug = l.category_slug
+   and not rt.is_demo
+ where l.listing_type = 'rent'
+   and l.status in ('active', 'reserved')
+   and not exists (
+     select 1 from public.reserve_resource_units u where u.listing_id = l.id
+   )
+on conflict (listing_id) do nothing;
 
 -- If a reservation row ever goes away, the units it was holding go back
 -- into the pool and its allocation goes with it. The ordinary path does
@@ -1211,6 +1246,7 @@ begin
 end;
 $$;
 
+drop trigger if exists reserve_reservation_frees_units on public.reserve_reservations;
 create trigger reserve_reservation_frees_units
   before delete on public.reserve_reservations
   for each row execute function public.reserve_free_units_of_deleted_reservation();
@@ -1564,23 +1600,28 @@ begin
   end loop;
 end $$;
 
+drop policy if exists "anyone reads the resource catalogue" on public.reserve_resource_types;
 create policy "anyone reads the resource catalogue"
   on public.reserve_resource_types for select
   using (not is_demo);
 
+drop policy if exists "anyone reads the units" on public.reserve_resource_units;
 create policy "anyone reads the units"
   on public.reserve_resource_units for select
   using (not is_demo);
 
+drop policy if exists "anyone reads the reservations" on public.reserve_reservations;
 create policy "anyone reads the reservations"
   on public.reserve_reservations for select
   using (not is_demo);
 
+drop policy if exists "anyone reads the reservation demands" on public.reserve_reservation_demands;
 create policy "anyone reads the reservation demands"
   on public.reserve_reservation_demands for select
   using (exists (select 1 from public.reserve_reservations r
                   where r.id = reserve_reservation_demands.reservation_id and not r.is_demo));
 
+drop policy if exists "anyone reads the reservation log" on public.reserve_reservation_logs;
 create policy "anyone reads the reservation log"
   on public.reserve_reservation_logs for select
   using (not is_demo);
