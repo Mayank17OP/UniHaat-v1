@@ -400,3 +400,72 @@ export const hint = (text) => {
   const el = document.querySelector(`[data-hint="${HINT}"]`);
   if (el) el.textContent = text;
 };
+
+/* ----------------------------------------------------------- UniReserve */
+
+/**
+ * The rentable stock: what kinds of thing there are, how many of each,
+ * and how many are free right now.
+ *
+ * The catalogue is a function rather than a table read because the counts
+ * have to be the ones the server holds, not the ones the browser remembers.
+ */
+export async function fetchReserveCatalogue() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("reserve_catalogue");
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Everything the UniReserve dashboard shows: the totals, the counts, the
+ * safe sequence and the reservation log.
+ */
+export async function fetchReserveDashboard() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("reserve_dashboard");
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Ask for a reservation.
+ *
+ * The decision is the server's: it runs the Banker's Algorithm, holds a
+ * request it cannot satisfy and refuses one that would leave the campus
+ * unable to finish. The browser never decides.
+ */
+export async function requestReservation({ durationDays = 7, requests = [], listingId = null } = {}) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("reserve_request", {
+    p_duration_days: durationDays,
+    p_requests: requests,
+    p_listing_id: listingId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** Give a reservation's resources back — the rental ended or was cancelled. */
+export async function releaseReservation(reservationId, status = "completed") {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("reserve_release", {
+    p_reservation: reservationId,
+    p_status: status,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** Run the four worked examples of the Banker's Algorithm. */
+export async function runReserveDemo() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("reserve_demo_scenarios");
+  if (error) throw error;
+  return data;
+}

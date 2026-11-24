@@ -52,3 +52,26 @@ export const DEMANDS = [
 ];
 
 export const CLEARANCE = ["p14", "p5", "p11"];
+
+// UniReserve — the rentable stock of the campus.
+//
+// This is the offline copy of the `reserve_resource_types` and
+// `reserve_resource_units` tables. The counts the interface shows are the
+// server's counts whenever the server is there; these rows are what the
+// feature falls back to when it is not, so the numbers it shows are still
+// real numbers rather than placeholders.
+export const RESERVE_TYPES = [
+  { slug: "cycles", label: "Cycles", unit_label: "cycle", category: "sports", monthly_rate: 400, sort: 1, description: "Campus cycles for the semester — the ones everybody wants in October." },
+  { slug: "calculators", label: "Calculators", unit_label: "calculator", category: "electronics", monthly_rate: 250, sort: 2, description: "Scientific calculators for the exam season. Borrow, do the paper, bring it back." },
+  { slug: "furniture", label: "Furniture", unit_label: "set", category: "furniture", monthly_rate: 900, sort: 3, description: "Study tables, chairs and shelves — the things a hostel room is missing." },
+  { slug: "hostel-gear", label: "Hostel gear", unit_label: "kit", category: "hostel", monthly_rate: 300, sort: 4, description: "Mattresses, lamps, kettles and the rest of a room." },
+  { slug: "instruments", label: "Instruments", unit_label: "instrument", category: "instruments", monthly_rate: 700, sort: 5, description: "Guitars, keyboards and the practice room gear." },
+];
+
+export const RESERVE_UNITS = [
+  ...Array.from({ length: 6 }, (_, i) => ({ id: `u-cycle-${i + 1}`, type: "cycles", label: `Campus cycle ${i + 1}`, monthly_rate: 400 })),
+  ...Array.from({ length: 8 }, (_, i) => ({ id: `u-calc-${i + 1}`, type: "calculators", label: `Scientific calculator ${i + 1}`, monthly_rate: 250 })),
+  ...Array.from({ length: 4 }, (_, i) => ({ id: `u-furn-${i + 1}`, type: "furniture", label: `Study table and chair ${i + 1}`, monthly_rate: 900 })),
+  ...Array.from({ length: 10 }, (_, i) => ({ id: `u-hostel-${i + 1}`, type: "hostel-gear", label: `Hostel kit ${i + 1}`, monthly_rate: 300 })),
+  ...Array.from({ length: 3 }, (_, i) => ({ id: `u-inst-${i + 1}`, type: "instruments", label: `Guitar ${i + 1}`, monthly_rate: 700 })),
+];

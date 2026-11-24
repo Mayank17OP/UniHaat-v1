@@ -10,6 +10,7 @@ import {
   initScrollProgress, initCardStagger, burstHeart, initMagnetic,
   initTilt, initTypeReveal, initLiveDots, showSkeletons, hideSkeletons,
 } from "./alive.js";
+import { initReserve } from "./reserve.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -570,6 +571,7 @@ $("#mVerifyBtn").addEventListener("click", () => { $("#mobileMenu").classList.re
 
 /* ---------- Init ---------- */
 renderGrid(); renderDemands(); renderSmart(); newSwapCode();
+initReserve({ toast, listings: products });
 initScrollProgress();
 initMagnetic();
 initTypeReveal("[data-reveal-type]");
@@ -611,6 +613,9 @@ initAuthUI({
         demands = merged;
       }
       renderGrid(); renderDemands();
+      // The rentable catalogue follows the marketplace: a rent listing is
+      // a thing somebody can borrow, so it joins the pool.
+      initReserve({ toast, listings: products });
       toast("Signed in — your listings and wishlist are in sync");
     } else if (event === "SIGNED_OUT") {
       toast("Signed out");

@@ -156,13 +156,7 @@ function setAuthMode(mode) {
     t.classList.toggle("active", on);
     t.setAttribute("aria-selected", String(on));
   });
-  // Slide the ink under the active tab
-  const active = $(`.auth-tab[data-authtab="${mode}"]`);
-  const ink = $("#authTabInk");
-  if (active && ink) {
-    ink.style.width = active.offsetWidth + "px";
-    ink.style.transform = `translateX(${active.offsetLeft}px)`;
-  }
+  positionTabInk();
   $("#nameField").hidden = !signup;
   $("#collegeField").hidden = !signup;
   $("#authSubmit").textContent = signup ? "Create account" : "Sign in";
@@ -171,6 +165,22 @@ function setAuthMode(mode) {
     ? "UniHaat only opens accounts on a college address — it powers campus-only discovery."
     : "Use the same college email you signed up with.";
   showError("");
+}
+
+/**
+ * Slide the ink under the active tab.
+ *
+ * This is only the ink — it must not touch the error message. The ink is
+ * positioned again when the web fonts finish loading, and a refused Google
+ * sign-in must not have its message wiped by that.
+ */
+function positionTabInk() {
+  const active = $(`.auth-tab[data-authtab="${authMode}"]`);
+  const ink = $("#authTabInk");
+  if (active && ink) {
+    ink.style.width = active.offsetWidth + "px";
+    ink.style.transform = `translateX(${active.offsetLeft}px)`;
+  }
 }
 
 /* ------------------------------------------------------------------- render */
@@ -253,6 +263,12 @@ function syncCollegeToEmail() {
 
 export function initAuthUI({ onAuth } = {}) {
   onSignedIn = onAuth || (() => {});
+
+  // A failed OAuth round-trip lands back here with an error in the URL.
+  // It is read and shown straight away: the student should not have to
+  // wait for the session and profile round-trips to learn that the
+  // sign-in was refused.
+  const oauthError = readOAuthError();
 
   $("#authCollege").innerHTML =
     `<option value="">Select your college</option>` +
@@ -356,8 +372,15 @@ export function initAuthUI({ onAuth } = {}) {
     closeCollegePicker();
   });
 
+  // The refused sign-in is announced before the network round-trips, so
+  // the student sees what happened straight away.
+  if (oauthError) {
+    openAuth("signin");
+    showError(oauthError.message);
+  }
+
   // Keep the tab ink aligned after fonts load / resize
-  const repositionInk = () => setAuthMode(authMode);
+  const repositionInk = () => positionTabInk();
   window.addEventListener("resize", repositionInk);
   if (document.fonts?.ready) document.fonts.ready.then(repositionInk);
 
@@ -385,12 +408,9 @@ export function initAuthUI({ onAuth } = {}) {
     await refreshProfile();
     renderAuthState();
     announceSession("INIT");
-    // A failed OAuth round-trip lands back here with an error in the URL.
-    const oauthError = readOAuthError();
-    if (oauthError) {
-      openAuth("signin");
-      showError(oauthError.message);
-    }
+    // The error was shown the moment the page booted. If a session did
+    // come back after all, the modal has no business staying open.
+    if (oauthError && isSignedIn()) closeAuth();
   });
 }
 
