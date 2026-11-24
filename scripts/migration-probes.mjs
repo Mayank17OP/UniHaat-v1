@@ -433,6 +433,14 @@ async function checkMigrationEarnsItsPlace() {
       await client.end();
     }
   }
+
+  // Each omission rebuilds the database with one migration missing, so the
+  // last one leaves it incomplete. The database is put back together before
+  // the script exits, so that whatever runs next finds a whole schema
+  // rather than the wreckage of the last omission.
+  const restored = await build();
+  await restored.end();
+
   return failed;
 }
 

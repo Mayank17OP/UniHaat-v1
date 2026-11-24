@@ -15,7 +15,8 @@
     "test:engine": "node scripts/engine-check.mjs && node scripts/optimality-check.mjs",
     "test:overflow": "node scripts/overflow-check.mjs",
     "test:probes": "node scripts/migration-probes.mjs --prepare",
-    "test:unimail": "node --test tests/unimail.test.mjs"
+    "test:unimail": "node --test tests/unimail.test.mjs",
+    "test:dist": "node scripts/build.mjs && BASE_URL=http://localhost:5175 npx playwright test --config=playwright.dist.config.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",
