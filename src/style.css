@@ -655,3 +655,14 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .dist-chip svg{flex-shrink:0}
 .dist-chip.near{background:var(--green);border-color:var(--green);color:#fff}
 .card-meta .dist{font-weight:700;color:var(--ink)}
+
+/* Header location button — visible before login/signup */
+.header-loc-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:7px 13px;font-weight:700;font-size:13px;color:var(--ink);white-space:nowrap;max-width:190px;transition:transform .18s var(--ease-spring),border-color .2s,background .2s}
+.header-loc-btn span{overflow:hidden;text-overflow:ellipsis}
+.header-loc-btn:hover{border-color:var(--ink);transform:translateY(-1px)}
+.header-loc-btn:active{transform:scale(.97)}
+.header-loc-btn.set{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+.header-loc-btn.set svg{color:var(--green)}
+@media(max-width:720px){
+  .header-loc-btn{padding:6px 10px;font-size:12px;max-width:135px}
+}

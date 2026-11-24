@@ -27,7 +27,7 @@ const fmt = (n) => "₹" + Number(n).toLocaleString("en-IN");
 let products = [...PRODUCTS];
 let demands = [...DEMANDS];
 let wishlist = new Set(JSON.parse(localStorage.getItem("uh-wishlist") || "[]"));
-let state = { q: "", type: "all", cat: "all", scope: "all", sort: "distance", radius: "all" };
+let state = { q: "", type: "all", cat: "all", college: "all", scope: "all", sort: "distance", radius: "all" };
 let userLocation = getStoredLocation();
 let verified = localStorage.getItem("uh-verified") === "1";
 let signedIn = false;
@@ -124,6 +124,9 @@ $("#catsRow").innerHTML = CATEGORIES.map((c) => {
   return `<button class="cat-btn" data-cat="${c.id}">${iconSvg(c.icon)}<span>${c.label}</span><small>${n} listings</small></button>`;
 }).join("");
 $("#catSelect").innerHTML = `<option value="all">All categories</option>` + CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
+if ($("#collegeFilter")) {
+  $("#collegeFilter").innerHTML = `<option value="all">All colleges</option>` + COLLEGES.map((c) => `<option value="${c.short}">${c.short} · ${c.label}</option>`).join("");
+}
 $("#spCat").innerHTML = CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
 $("#sellCat").innerHTML = CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
 $("#demandCat").innerHTML = `<option value="">Select category</option>` + CATEGORIES.map((c) => `<option value="${c.id}">${c.label}</option>`).join("");
@@ -144,8 +147,15 @@ function filtered() {
   let list = products.filter((p) => {
     if (state.type !== "all" && p.type !== state.type) return false;
     if (state.cat !== "all" && p.category !== state.cat) return false;
+    if (state.college !== "all") {
+      const col = COLLEGES.find((c) => c.short === state.college);
+      const pCol = String(p.college || "").toLowerCase();
+      const matchShort = pCol.includes(state.college.toLowerCase());
+      const matchLabel = col && pCol.includes(col.label.toLowerCase());
+      if (!matchShort && !matchLabel) return false;
+    }
     if (state.scope !== "all" && p.scope !== state.scope) return false;
-    if (state.q && !(p.title + " " + p.desc + " " + p.category).toLowerCase().includes(state.q.toLowerCase())) return false;
+    if (state.q && !(p.title + " " + p.desc + " " + p.category + " " + p.college).toLowerCase().includes(state.q.toLowerCase())) return false;
     return true;
   });
   if (userLocation && state.radius !== "all") {
@@ -201,6 +211,7 @@ function updateWishlistCount() {
 $("#searchInput").addEventListener("input", (e) => { state.q = e.target.value; renderGrid(); });
 $("#sortSelect").addEventListener("change", (e) => { state.sort = e.target.value; renderGrid(); });
 $("#catSelect").addEventListener("change", (e) => { state.cat = e.target.value; syncCatButtons(); renderGrid(); });
+$("#collegeFilter")?.addEventListener("change", (e) => { state.college = e.target.value; renderGrid(); });
 $("#radiusSelect")?.addEventListener("change", (e) => { state.radius = e.target.value; renderGrid(); });
 $$("#typePills .pill").forEach((b) => b.addEventListener("click", () => {
   $$("#typePills .pill").forEach((x) => x.classList.remove("active")); b.classList.add("active");
@@ -603,13 +614,19 @@ function populateLocationPicker() {
 function updateLocationUI() {
   const chip = $("#locationChip");
   const chipText = $("#locationChipText");
+  const headerBtn = $("#headerLocationBtn");
+  const headerText = $("#headerLocationText");
+  const mLocBtn = $("#mLocationBtn");
   const hint = $("#locationHint");
   const sub = $("#marketplaceSub");
-  if (!chip || !chipText) return;
   if (userLocation) {
-    chip.classList.add("set");
     const tag = userLocation.short || userLocation.label || "Your location";
-    chipText.textContent = userLocation.source === "device" ? `Near you · ${tag}` : tag;
+    const display = userLocation.source === "device" ? `Near you · ${tag}` : tag;
+    if (chip) chip.classList.add("set");
+    if (chipText) chipText.textContent = display;
+    if (headerBtn) headerBtn.classList.add("set");
+    if (headerText) headerText.textContent = tag;
+    if (mLocBtn) mLocBtn.textContent = `Location: ${tag}`;
     if (hint) {
       hint.textContent = userLocation.source === "device"
         ? "Sorted by distance from your current location."
@@ -619,8 +636,11 @@ function updateLocationUI() {
       sub.textContent = `Listings sorted by distance from ${userLocation.label} — closest first.`;
     }
   } else {
-    chip.classList.remove("set");
-    chipText.textContent = "Set your location";
+    if (chip) chip.classList.remove("set");
+    if (chipText) chipText.textContent = "Set your location";
+    if (headerBtn) headerBtn.classList.remove("set");
+    if (headerText) headerText.textContent = "Set location";
+    if (mLocBtn) mLocBtn.textContent = "Set location";
     if (hint) hint.textContent = "Allow location and we’ll sort listings by how close they are. Or pick a campus by hand.";
     if (sub) sub.textContent = "Same college, same university and nearby colleges — sorted by distance. Every listing shows a SmartPrice verdict.";
   }
@@ -684,7 +704,20 @@ async function handleDeviceLocationRequest({ fromPrompt = false } = {}) {
   }
 }
 
-$("#locationChip")?.addEventListener("click", () => openLocationPicker());
+function onLocationTrigger() {
+  if (!userLocation) {
+    handleDeviceLocationRequest({ fromPrompt: false });
+  } else {
+    openLocationPicker();
+  }
+}
+
+$("#headerLocationBtn")?.addEventListener("click", onLocationTrigger);
+$("#mLocationBtn")?.addEventListener("click", () => {
+  $("#mobileMenu")?.classList.remove("open");
+  onLocationTrigger();
+});
+$("#locationChip")?.addEventListener("click", onLocationTrigger);
 $("#locationAllowBtn")?.addEventListener("click", () => handleDeviceLocationRequest({ fromPrompt: true }));
 $("#locationManualBtn")?.addEventListener("click", () => {
   markLocationPromptHandled();
