@@ -19,7 +19,7 @@ export const COLLEGES = [
   { short: "Amity", label: "Amity University", domain: "amity.edu", lat: 28.546, lng: 77.232 },
   { short: "IPU", label: "Indraprastha University", domain: "ipu.ac.in", lat: 28.585, lng: 77.05 },
   { short: "NSUT", label: "Netaji Subhas University of Technology", domain: "nsut.ac.in", lat: 28.61, lng: 77.037 },
-  { short: "DTC", label: "Delhi Technical Campus", domain: "delhitechnicalcampus.ac.in", lat: 28.4744, lng: 77.492 },
+  { short: "DTC", label: "Delhi Technical Campus (DTC), IP University", domain: "delhitechnicalcampus.ac.in", lat: 28.4744, lng: 77.492 },
 ];
 
 export const CATEGORIES = [

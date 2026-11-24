@@ -42,10 +42,6 @@
         <a href="#impact">UniImpact</a>
       </nav>
       <div class="nav-actions">
-        <button class="header-loc-btn" id="headerLocationBtn" type="button" title="Set your location for nearby listings" aria-haspopup="dialog">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-          <span id="headerLocationText">Set location</span>
-        </button>
         <button class="icon-btn" id="wishlistBtn" aria-label="Wishlist">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
           <span class="count" id="wishlistCount">0</span>
@@ -59,6 +55,10 @@
         <span class="sync-pill" id="syncPill" data-state="local" title="Data connection status">
           <i class="live-dot"></i><span id="syncText">Local</span>
         </span>
+        <button class="header-loc-btn" id="headerLocationBtn" type="button" title="Toggle location On/Off for nearby discovery" aria-haspopup="dialog" aria-pressed="false">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="headerLocationText">Location: Off</span>
+        </button>
         <button class="avatar" id="avatarBtn" aria-label="Your profile" aria-haspopup="true" aria-expanded="false" hidden>A</button>
         <button class="hamburger" id="menuBtn" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
       </div>
@@ -595,7 +595,7 @@
           <option value="Amity">Amity University</option>
           <option value="IPU">Indraprastha University</option>
           <option value="NSUT">Netaji Subhas University of Technology</option>
-          <option value="DTC">Delhi Technical Campus</option>
+          <option value="DTC">Delhi Technical Campus (DTC), IP University</option>
         </select></label>
         <label>Student ID<input name="studentId" required placeholder="DTU/2K23/… " /></label>
         <button class="btn btn-primary btn-block" type="submit">Verify me</button>
@@ -654,9 +654,10 @@
   <!-- CHAT DRAWER -->
   <aside class="drawer" id="chatDrawer" aria-label="Chat" hidden>
     <div class="drawer-head">
-      <div><strong id="chatTitle">Chat</strong><p class="fine" id="chatSub">Seller · responds in ~1 hr</p></div>
+      <div><strong id="chatTitle">Chat</strong><p class="fine" id="chatSub">Direct student-to-student chat</p></div>
       <button class="modal-close" id="chatClose" aria-label="Close chat">×</button>
     </div>
+    <div class="chat-inbox" id="chatInbox" hidden></div>
     <div class="chat-body" id="chatBody"></div>
     <form class="chat-form" id="chatForm">
       <input id="chatInput" placeholder="Message… try: Can you do ₹2,200?" aria-label="Message" />
