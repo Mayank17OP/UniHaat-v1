@@ -155,7 +155,7 @@
         <div>
           <p class="eyebrow">Nearby Marketplace</p>
           <h2>Fresh listings near you</h2>
-          <p class="sub">Same college, same university and nearby colleges — sorted by distance. Every listing shows a SmartPrice verdict.</p>
+          <p class="sub" id="marketplaceSub">Same college, same university and nearby colleges — sorted by distance. Every listing shows a SmartPrice verdict.</p>
         </div>
         <div class="scope" role="group" aria-label="College scope">
           <button class="scope-btn active" data-scope="all">All nearby</button>
@@ -191,6 +191,24 @@
           <span class="sr-only">Category</span>
           <select id="catSelect" aria-label="Category"><option value="all">All categories</option></select>
         </label>
+        <label class="select-wrap">
+          <span class="sr-only">Distance</span>
+          <select id="radiusSelect" aria-label="Distance">
+            <option value="all">Any distance</option>
+            <option value="1">Within 1 km</option>
+            <option value="2">Within 2 km</option>
+            <option value="5">Within 5 km</option>
+            <option value="10">Within 10 km</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="location-bar" id="locationBar">
+        <button class="location-chip" id="locationChip" type="button" aria-haspopup="dialog">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span id="locationChipText">Set your location</span>
+        </button>
+        <p class="fine" id="locationHint">Allow location and we’ll sort listings by how close they are. Or pick a campus by hand.</p>
       </div>
 
       <p class="results-meta" id="resultsMeta" aria-live="polite"></p>
@@ -559,6 +577,53 @@
         <label>Student ID<input name="studentId" required placeholder="DTU/2K23/… " /></label>
         <button class="btn btn-primary btn-block" type="submit">Verify me</button>
         <p class="fine">Your college address and your student ID are the evidence. The server checks both before it marks you verified.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- LOCATION PERMISSION PROMPT — shown once, right after sign-in -->
+  <div class="overlay" id="locationPrompt" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="locationPromptTitle">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <p class="eyebrow">Nearby discovery</p>
+      <h2 id="locationPromptTitle">See what’s closest to you?</h2>
+      <p class="sub">Allow location and UniHaat will sort listings by how far they are from you — the closest first, with the distance on every card. Your exact location is never shown to another student; they only ever see a distance.</p>
+      <div class="location-actions">
+        <button class="btn btn-primary btn-block" id="locationAllowBtn" type="button">Allow location</button>
+        <button class="btn btn-ghost btn-block" id="locationManualBtn" type="button">Choose a campus instead</button>
+        <button class="btn btn-ghost btn-block" id="locationSkipBtn" type="button">Not now</button>
+      </div>
+      <p class="fine">You can change this any time from the location button above the listings. If you say no, you can still pick a campus by hand.</p>
+    </div>
+  </div>
+
+  <!-- MANUAL LOCATION PICKER — the fallback when GPS is refused or absent -->
+  <div class="overlay" id="locationPicker" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="locationPickerTitle">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <p class="eyebrow">Set your location</p>
+      <h2 id="locationPickerTitle">Where are you?</h2>
+      <p class="sub">Pick the campus or area you’re at. Listings will be sorted by distance from there, closest first.</p>
+      <form id="locationForm">
+        <label>Your location
+          <select name="place" id="locationPlace" required></select>
+        </label>
+        <label>Show listings
+          <select name="radius" id="locationRadius">
+            <option value="all">Any distance</option>
+            <option value="1">Within 1 km</option>
+            <option value="2">Within 2 km</option>
+            <option value="5">Within 5 km</option>
+            <option value="10">Within 10 km</option>
+          </select>
+        </label>
+        <p class="auth-error" id="locationError" role="alert" hidden></p>
+        <button class="btn btn-primary btn-block" type="submit">Show nearby listings</button>
+        <div class="location-actions">
+          <button class="btn btn-ghost btn-block" id="locationUseDeviceBtn" type="button">Use my device location</button>
+          <button class="btn btn-ghost btn-block" id="locationClearBtn" type="button">Clear location</button>
+        </div>
+        <p class="fine">A hand-picked location is approximate — distances are measured from the campus gate. Allow device location for the exact answer.</p>
       </form>
     </div>
   </div>

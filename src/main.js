@@ -3,9 +3,17 @@ import * as SB from "./supabase.js";
 import { initAuthUI, getProfileData, refreshProfile, renderAuthState } from "./auth.js";
 import { collegeForEmail } from "./college-email.js";
 import {
-  syncWishlist, syncListings, syncDemands,
+  syncWishlist, syncListings, syncDemands, syncNearbyListings,
+  syncMyLocation, persistMyLocation, persistClearLocation,
   publishListing, publishDemand, persistWishlist,
 } from "./persistence.js";
+import {
+  MANUAL_LOCATIONS, manualLocationById,
+  getStoredLocation, saveStoredLocation, clearStoredLocation,
+  hasLocationPromptBeenHandled, markLocationPromptHandled,
+  requestDeviceLocation, applyDistances, sortByDistance,
+  withinRadius, displayDistance, deviceLabel,
+} from "./location.js";
 import {
   initScrollProgress, initCardStagger, burstHeart, initMagnetic,
   initTilt, initTypeReveal, initLiveDots, showSkeletons, hideSkeletons,
@@ -19,7 +27,8 @@ const fmt = (n) => "₹" + Number(n).toLocaleString("en-IN");
 let products = [...PRODUCTS];
 let demands = [...DEMANDS];
 let wishlist = new Set(JSON.parse(localStorage.getItem("uh-wishlist") || "[]"));
-let state = { q: "", type: "all", cat: "all", scope: "all", sort: "distance" };
+let state = { q: "", type: "all", cat: "all", scope: "all", sort: "distance", radius: "all" };
+let userLocation = getStoredLocation();
 let verified = localStorage.getItem("uh-verified") === "1";
 let signedIn = false;
 
@@ -139,8 +148,11 @@ function filtered() {
     if (state.q && !(p.title + " " + p.desc + " " + p.category).toLowerCase().includes(state.q.toLowerCase())) return false;
     return true;
   });
+  if (userLocation && state.radius !== "all") {
+    list = withinRadius(list, userLocation, Number(state.radius));
+  }
   const dealScore = (p) => (p.type === "free" ? 0 : p.price / (smartPrice({ category: p.category, original: p.original, ageMonths: p.ageMonths, condition: p.condition }).rec || 1));
-  if (state.sort === "distance") list.sort((a, b) => a.distance - b.distance);
+  if (state.sort === "distance") return sortByDistance(list, userLocation);
   if (state.sort === "price-asc") list.sort((a, b) => a.price - b.price);
   if (state.sort === "price-desc") list.sort((a, b) => b.price - a.price);
   if (state.sort === "newest") list.sort((a, b) => a.created - b.created);
@@ -149,23 +161,27 @@ function filtered() {
 }
 function renderGrid() {
   const list = filtered();
-  $("#resultsMeta").textContent = `${list.length} listing${list.length === 1 ? "" : "s"} · verified students only`;
+  const locNote = userLocation ? ` · near ${userLocation.short || userLocation.label}` : "";
+  $("#resultsMeta").textContent = `${list.length} listing${list.length === 1 ? "" : "s"}${locNote} · verified students only`;
   $("#emptyState").hidden = list.length > 0;
   $("#productGrid").innerHTML = list.map((p) => {
     const v = verdict(p);
     const saved = wishlist.has(p.id);
+    const dist = displayDistance(p);
+    const isNear = typeof p.distance === "number" && p.distance <= 1;
     return `<article class="card" data-id="${p.id}" tabindex="0" role="button" aria-label="${p.title}">
       <div class="card-img">
         <img src="${p.img}" alt="${p.title}" loading="lazy" onerror="this.style.opacity=.15" />
         <span class="type-badge ${p.type}">${typeLabel(p)}</span>
         ${p.live ? `<span class="live-chip"><i class="live-dot"></i>live</span>` : ""}
+        ${dist ? `<span class="dist-chip ${isNear ? "near" : ""}" title="Distance from your location"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>${dist}</span>` : ""}
         <button class="heart ${saved ? "saved" : ""}" data-heart="${p.id}" aria-label="Save to wishlist" aria-pressed="${saved}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
         </button>
       </div>
       <div class="card-body">
         <h3>${p.title}</h3>
-        <div class="card-meta"><span>${p.college}</span><span>· ${p.distance} km</span><span>· ${p.condition}</span><span class="verified">✓ Verified</span></div>
+        <div class="card-meta"><span>${p.college}</span>${dist ? `<span class="dist">· ${dist}</span>` : ""}<span>· ${p.condition}</span><span class="verified">✓ Verified</span></div>
         <span class="verdict ${v.cls}">${v.label}</span>
         <div class="card-foot"><span class="price">${priceLabel(p)}</span><span class="fine">${p.seller} ${sellerRating(p)}</span></div>
       </div>
@@ -185,6 +201,7 @@ function updateWishlistCount() {
 $("#searchInput").addEventListener("input", (e) => { state.q = e.target.value; renderGrid(); });
 $("#sortSelect").addEventListener("change", (e) => { state.sort = e.target.value; renderGrid(); });
 $("#catSelect").addEventListener("change", (e) => { state.cat = e.target.value; syncCatButtons(); renderGrid(); });
+$("#radiusSelect")?.addEventListener("change", (e) => { state.radius = e.target.value; renderGrid(); });
 $$("#typePills .pill").forEach((b) => b.addEventListener("click", () => {
   $$("#typePills .pill").forEach((x) => x.classList.remove("active")); b.classList.add("active");
   state.type = b.dataset.type; renderGrid();
@@ -256,7 +273,7 @@ function openProduct(id) {
   $("#modalBody").innerHTML = `<div class="detail">
     <div class="detail-img"><img src="${p.img}" alt="${p.title}" onerror="this.style.opacity=.15" /></div>
     <div class="detail-body">
-      <p class="eyebrow">${typeLabel(p)} · ${p.college} · ${p.distance} km away</p>
+      <p class="eyebrow">${typeLabel(p)} · ${p.college}${displayDistance(p) ? ` · ${displayDistance(p)} away` : ""}</p>
       <h2 id="modalTitle">${p.title}</h2>
       <div class="row-between"><span class="price" style="font-size:28px">${priceLabel(p)}</span><span class="fine">Original ${fmt(p.original)} · ${p.ageMonths} months old</span></div>
       <span class="verdict ${v.cls}" style="margin-top:8px">${v.label}</span>
@@ -569,6 +586,150 @@ $$("#mobileMenu a").forEach((a) => a.addEventListener("click", () => $("#mobileM
 $("#mSellBtn").addEventListener("click", () => { $("#mobileMenu").classList.remove("open"); openOverlay("#sellOverlay"); });
 $("#mVerifyBtn").addEventListener("click", () => { $("#mobileMenu").classList.remove("open"); openOverlay("#verifyOverlay"); });
 
+/* ---------- Location discovery ---------- */
+function populateLocationPicker() {
+  const sel = $("#locationPlace");
+  if (!sel) return;
+  sel.innerHTML = MANUAL_LOCATIONS.map(
+    (p) => `<option value="${p.id}">${p.label}</option>`,
+  ).join("");
+  if (userLocation?.id && manualLocationById(userLocation.id)) {
+    sel.value = userLocation.id;
+  }
+  const rad = $("#locationRadius");
+  if (rad) rad.value = state.radius;
+}
+
+function updateLocationUI() {
+  const chip = $("#locationChip");
+  const chipText = $("#locationChipText");
+  const hint = $("#locationHint");
+  const sub = $("#marketplaceSub");
+  if (!chip || !chipText) return;
+  if (userLocation) {
+    chip.classList.add("set");
+    const tag = userLocation.short || userLocation.label || "Your location";
+    chipText.textContent = userLocation.source === "device" ? `Near you · ${tag}` : tag;
+    if (hint) {
+      hint.textContent = userLocation.source === "device"
+        ? "Sorted by distance from your current location."
+        : `Sorted by distance from ${userLocation.label}.`;
+    }
+    if (sub) {
+      sub.textContent = `Listings sorted by distance from ${userLocation.label} — closest first.`;
+    }
+  } else {
+    chip.classList.remove("set");
+    chipText.textContent = "Set your location";
+    if (hint) hint.textContent = "Allow location and we’ll sort listings by how close they are. Or pick a campus by hand.";
+    if (sub) sub.textContent = "Same college, same university and nearby colleges — sorted by distance. Every listing shows a SmartPrice verdict.";
+  }
+}
+
+function applyLocation(loc, { persist = true, silent = false } = {}) {
+  userLocation = loc;
+  saveStoredLocation(loc);
+  products = applyDistances(products, loc);
+  updateLocationUI();
+  renderGrid();
+  if (persist && signedIn) persistMyLocation(loc);
+  if (!silent) {
+    toast(`Showing listings nearest to ${loc.short || loc.label}`);
+  }
+}
+
+function openLocationPicker(errorMessage = "") {
+  populateLocationPicker();
+  const err = $("#locationError");
+  if (err) {
+    err.textContent = errorMessage;
+    err.hidden = !errorMessage;
+  }
+  openOverlay("#locationPicker");
+}
+
+async function handleDeviceLocationRequest({ fromPrompt = false } = {}) {
+  const btn = fromPrompt ? $("#locationAllowBtn") : $("#locationUseDeviceBtn");
+  const prevText = btn?.textContent;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Detecting location…";
+  }
+  try {
+    const coords = await requestDeviceLocation();
+    const label = deviceLabel(coords.lat, coords.lng);
+    if (fromPrompt) markLocationPromptHandled();
+    closeOverlay(fromPrompt ? "#locationPrompt" : "#locationPicker");
+    applyLocation({
+      lat: coords.lat,
+      lng: coords.lng,
+      label,
+      short: label,
+      source: "device",
+    });
+  } catch (err) {
+    if (fromPrompt) {
+      markLocationPromptHandled();
+      closeOverlay("#locationPrompt");
+    }
+    const msg = err?.code === "denied"
+      ? "Location permission was denied. Pick a campus below to see nearby listings."
+      : (err?.message || "Could not detect your location. Pick a campus below.");
+    openLocationPicker(msg);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  }
+}
+
+$("#locationChip")?.addEventListener("click", () => openLocationPicker());
+$("#locationAllowBtn")?.addEventListener("click", () => handleDeviceLocationRequest({ fromPrompt: true }));
+$("#locationManualBtn")?.addEventListener("click", () => {
+  markLocationPromptHandled();
+  closeOverlay("#locationPrompt");
+  openLocationPicker();
+});
+$("#locationSkipBtn")?.addEventListener("click", () => {
+  markLocationPromptHandled();
+  closeOverlay("#locationPrompt");
+});
+$("#locationUseDeviceBtn")?.addEventListener("click", () => handleDeviceLocationRequest({ fromPrompt: false }));
+$("#locationClearBtn")?.addEventListener("click", () => {
+  userLocation = null;
+  clearStoredLocation();
+  if (signedIn) persistClearLocation();
+  state.radius = "all";
+  if ($("#radiusSelect")) $("#radiusSelect").value = "all";
+  updateLocationUI();
+  closeOverlay("#locationPicker");
+  renderGrid();
+  toast("Location cleared");
+});
+$("#locationForm")?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const place = manualLocationById($("#locationPlace")?.value);
+  if (!place) return;
+  const rad = $("#locationRadius")?.value || "all";
+  state.radius = rad;
+  if ($("#radiusSelect")) $("#radiusSelect").value = rad;
+  closeOverlay("#locationPicker");
+  applyLocation({
+    id: place.id,
+    lat: place.lat,
+    lng: place.lng,
+    label: place.label,
+    short: place.short,
+    source: "manual",
+  });
+});
+
+if (userLocation) {
+  products = applyDistances(products, userLocation);
+}
+updateLocationUI();
+
 /* ---------- Init ---------- */
 renderGrid(); renderDemands(); renderSmart(); newSwapCode();
 initReserve({ toast, listings: products });
@@ -583,8 +744,9 @@ initAuthUI({
 
     if (signedIn) {
       // Bring the cloud state down into the UI
-      const [ids, liveListings, liveDemands] = await Promise.all([
+      const [ids, liveListings, liveDemands, savedLoc] = await Promise.all([
         syncWishlist(), syncListings(), syncDemands(),
+        userLocation ? Promise.resolve(null) : syncMyLocation(),
       ]);
       if (ids) {
         wishlist = new Set(ids);
@@ -612,11 +774,22 @@ initAuthUI({
         });
         demands = merged;
       }
+      if (savedLoc && !userLocation) {
+        userLocation = savedLoc;
+        saveStoredLocation(savedLoc);
+        updateLocationUI();
+      }
+      if (userLocation) {
+        products = applyDistances(products, userLocation);
+      }
       renderGrid(); renderDemands();
       // The rentable catalogue follows the marketplace: a rent listing is
       // a thing somebody can borrow, so it joins the pool.
       initReserve({ toast, listings: products });
       toast("Signed in — your listings and wishlist are in sync");
+      if (!userLocation && !hasLocationPromptBeenHandled()) {
+        openOverlay("#locationPrompt");
+      }
     } else if (event === "SIGNED_OUT") {
       toast("Signed out");
     }

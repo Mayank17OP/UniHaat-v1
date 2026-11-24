@@ -481,3 +481,71 @@ export async function runReserveDemo() {
   if (error) throw error;
   return data;
 }
+
+/* ---------------------------------------------------- location discovery */
+
+/**
+ * Active listings nearest to a point, nearest first.
+ *
+ * The ordering is the server's: it measures the haversine against every
+ * listing's coordinates, so the browser never has to page through the
+ * whole catalogue to find what is close. `radiusKm` narrows the answer;
+ * listings with no coordinates cannot be measured, so a radius excludes
+ * them rather than guessing.
+ */
+export async function fetchNearbyListings({ lat, lng, radiusKm = null, limit = 50 } = {}) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("nearby_listings", {
+    p_lat: lat,
+    p_lng: lng,
+    p_radius_km: radiusKm,
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Remember where this student is, so discovery survives a reload.
+ *
+ * The coordinates live on the student's own profile row, behind a
+ * server function — the client has no direct grant on those columns,
+ * and no other student can read them.
+ */
+export async function saveMyLocation({ lat, lng, label = null } = {}) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { error } = await supa.rpc("save_my_location", {
+    p_lat: lat,
+    p_lng: lng,
+    p_label: label,
+  });
+  if (error) throw error;
+  return true;
+}
+
+/** The student's saved location, or null when they have none. */
+export async function getMyLocation() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("get_my_location");
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || row.lat == null || row.lng == null) return null;
+  return {
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    label: row.label || "Your location",
+    updatedAt: row.updated_at || null,
+  };
+}
+
+/** Forget the saved location — the student asked not to be located. */
+export async function clearMyLocation() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { error } = await supa.rpc("clear_my_location");
+  if (error) throw error;
+  return true;
+}
