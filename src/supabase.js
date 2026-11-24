@@ -549,3 +549,94 @@ export async function clearMyLocation() {
   if (error) throw error;
   return true;
 }
+
+/* ---------------------------------------------------- real-time chat */
+
+export async function getOrCreateConversation({ listingId = null, buyerId, sellerId }) {
+  const supa = getClient();
+  if (!supa || !buyerId || !sellerId) return null;
+  let q = supa
+    .from("conversations")
+    .select("*")
+    .eq("buyer_id", buyerId)
+    .eq("seller_id", sellerId);
+  if (listingId) q = q.eq("listing_id", listingId);
+  else q = q.is("listing_id", null);
+  const { data: existing, error: selErr } = await q.maybeSingle();
+  if (selErr) throw selErr;
+  if (existing) return existing;
+
+  const { data, error } = await supa
+    .from("conversations")
+    .insert({ listing_id: listingId, buyer_id: buyerId, seller_id: sellerId })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function fetchConversations() {
+  const supa = getClient();
+  const uid = currentUserId();
+  if (!supa || !uid) return [];
+  const { data, error } = await supa
+    .from("conversations")
+    .select(`
+      *,
+      listings:listing_id (id, title, price),
+      buyer:buyer_id (id, full_name),
+      seller:seller_id (id, full_name)
+    `)
+    .or(`buyer_id.eq.${uid},seller_id.eq.${uid}`)
+    .order("last_message_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchMessages(conversationId) {
+  const supa = getClient();
+  if (!supa || !conversationId) return [];
+  const { data, error } = await supa
+    .from("messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function sendMessage({ conversationId, body }) {
+  const supa = getClient();
+  const uid = currentUserId();
+  if (!supa || !uid || !conversationId) return null;
+  const { data, error } = await supa
+    .from("messages")
+    .insert({ conversation_id: conversationId, sender_id: uid, body })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export function subscribeToMessages(conversationId, onMessage) {
+  const supa = getClient();
+  if (!supa || !conversationId) return () => {};
+  const channel = supa
+    .channel(`chat:${conversationId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `conversation_id=eq.${conversationId}`,
+      },
+      (payload) => {
+        if (payload?.new) onMessage(payload.new);
+      },
+    )
+    .subscribe();
+  return () => {
+    supa.removeChannel(channel);
+  };
+}
