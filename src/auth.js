@@ -3,7 +3,8 @@
 
 import {
   initAuth, signUp, signIn, signInWithGoogle, signOut,
-  getUser, getProfile, getMode, isSignedIn, onAuthChange,
+  getUser, getSession, getProfile, updateProfile, fetchColleges,
+  getMode, isSignedIn, onAuthChange,
 } from "./supabase.js";
 import { COLLEGES } from "./data.js";
 
@@ -13,6 +14,49 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 let authMode = "signin";
 let profile = null;
 let onSignedIn = () => {};
+// The session that has already been handed to the app, so a page that fires
+// INITIAL_SESSION + SIGNED_IN + INIT does not sync three times.
+let announcedSessionKey = null;
+let profileLoadedFor = null;
+let profilePromise = null;
+
+/* -------------------------------------------------------------- oauth errors */
+
+/**
+ * Supabase sends a failed OAuth round-trip back as query (or hash) params.
+ * Read them, clean the address bar and turn them into something a student
+ * can act on — otherwise a denied consent screen fails silently.
+ */
+function readOAuthError() {
+  const params = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const code = params.get("error_code") || params.get("error") || hash.get("error_code") || hash.get("error");
+  if (!code) return null;
+  const raw = params.get("error_description") || hash.get("error_description") || code;
+  // Strip the URL so a refresh does not re-report the same failure.
+  const clean = location.pathname + location.hash.replace(/[#&].*$/, "");
+  history.replaceState(null, "", clean);
+  return { code, message: describeOAuthError(code, raw) };
+}
+
+function describeOAuthError(code, raw) {
+  const c = String(code).toLowerCase();
+  if (c.includes("access_denied")) return "Google sign-in was cancelled — you weren't signed in.";
+  if (c.includes("not_allowed") || c.includes("invalid_request"))
+    return "That sign-in was blocked. Check the redirect URI in your Google OAuth settings.";
+  if (c.includes("session_not_found") || c.includes("invalid_code"))
+    return "That sign-in link has expired. Try Google sign-in again.";
+  if (c.includes("server_error") || c.includes("temporarily_unavailable"))
+    return "Google had a problem signing you in. Try again in a moment.";
+  return raw ? `Google sign-in failed: ${raw}` : "Google sign-in failed. Try again.";
+}
+
+/** A stable identity for the current session, or null when signed out. */
+function sessionKey() {
+  const s = getSession();
+  if (!s?.user?.id) return null;
+  return `${s.user.id}:${s.access_token || ""}`;
+}
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -37,6 +81,61 @@ function setBusy(button, busy, label) {
 function initials(name) {
   if (!name) return "A";
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+}
+
+/* ------------------------------------------------------------ college picker */
+
+const COLLEGE_PROMPTED = "uh-college-prompted";
+
+/**
+ * Google sign-up has no college step, so a Google student's profile is born
+ * without one and campus-only discovery silently does nothing. Offer the
+ * picker once, right after they land.
+ */
+function maybeAskForCollege() {
+  if (!isSignedIn()) return;
+  if (profile?.college_id) return;
+  if (localStorage.getItem(COLLEGE_PROMPTED) === "1") return;
+  localStorage.setItem(COLLEGE_PROMPTED, "1");
+  openCollegePicker();
+}
+
+/** Fill the college select from the database, falling back to the seed list. */
+async function populateColleges() {
+  const select = $("#collegePick");
+  if (!select) return;
+  let rows = null;
+  try {
+    rows = await fetchColleges();
+  } catch (err) {
+    console.warn("[UniHaat] college lookup failed", err?.message);
+  }
+  if (rows?.length) {
+    select.innerHTML =
+      `<option value="">Select your college</option>` +
+      rows.map((c) => `<option value="${c.id}" data-short="${c.short_name}">${c.name}</option>`).join("");
+  } else {
+    // Offline: the short name still identifies the college in the seed data.
+    select.innerHTML =
+      `<option value="">Select your college</option>` +
+      COLLEGES.map((c) => `<option value="${c.short}" data-short="${c.short}">${c.label}</option>`).join("");
+  }
+}
+
+export function openCollegePicker() {
+  const overlay = $("#collegeOverlay");
+  if (!overlay) return;
+  populateColleges();
+  overlay.hidden = false;
+  document.body.style.overflow = "hidden";
+  setTimeout(() => $("#collegePick")?.focus(), 120);
+}
+
+function closeCollegePicker() {
+  const overlay = $("#collegeOverlay");
+  if (!overlay) return;
+  overlay.hidden = true;
+  document.body.style.overflow = "";
 }
 
 /* -------------------------------------------------------------------- modal */
@@ -97,8 +196,8 @@ function renderAuthState() {
     $("#avatarBtn").textContent = letter;
     $("#menuAvatar").textContent = letter;
     $("#menuName").textContent = name;
-    const college = profile?.colleges?.short_name || profile?.college_id || "—";
-    $("#menuCollege").textContent = `${college} · ${signedIn ? "Signed in" : ""}`;
+    const college = profile?.colleges?.short_name || profile?.college_id;
+    $("#menuCollege").textContent = college ? `${college} · Signed in` : "No college set yet";
     $("#menuDeals").textContent = profile?.deals_completed ?? 0;
     $("#menuSaved").textContent = profile?.items_reused ?? 0;
     $("#menuRating").textContent = profile?.rating_count
@@ -106,9 +205,16 @@ function renderAuthState() {
       : "—";
     $("#menuVerify").textContent = profile?.verified ? "✓ Student verified" : "Verify as a student";
     $("#menuVerify").disabled = Boolean(profile?.verified);
+    // Google sign-in has no college step, so offer one until it is set.
+    const needsCollege = !profile?.college_id;
+    $("#menuCollegeBtn").hidden = !needsCollege;
+    $("#menuCollegeBtn").textContent = profile?.colleges?.short_name
+      ? `College: ${profile.colleges.short_name}`
+      : "Choose your college";
   } else {
     $("#menuName").textContent = "Guest";
     $("#menuCollege").textContent = "Sign in to sync your listings";
+    $("#menuCollegeBtn").hidden = true;
   }
 }
 
@@ -225,6 +331,41 @@ export function initAuthUI({ onAuth } = {}) {
     $("#avatarBtn").setAttribute("aria-expanded", "false");
     document.getElementById("verifyBtn")?.click();
   });
+  $("#menuCollegeBtn").addEventListener("click", () => {
+    menu.hidden = true;
+    $("#avatarBtn").setAttribute("aria-expanded", "false");
+    openCollegePicker();
+  });
+
+  // College picker (the backdrop and the × button are wired globally in main.js)
+  $("#collegeForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const value = $("#collegePick").value;
+    if (!value) return;
+    const btn = $("#collegeForm button[type=submit]");
+    btn.disabled = true;
+    try {
+      // The seed list yields a short name; the database yields a uuid.
+      const patch = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(value)
+        ? { college_id: value }
+        : { college_short: value };
+      if (patch.college_short) {
+        // Resolve the short name to the college row the profile expects.
+        const rows = await fetchColleges().catch(() => null);
+        const match = rows?.find((c) => c.short_name === value);
+        if (!match) throw new Error("college not found");
+        patch.college_id = match.id;
+        delete patch.college_short;
+      }
+      await updateProfile(patch);
+      await refreshProfile({ force: true });
+      renderAuthState();
+      closeCollegePicker();
+    } catch (err) {
+      console.warn("[UniHaat] could not save college", err?.message);
+      btn.disabled = false;
+    }
+  });
 
   // Keep the tab ink aligned after fonts load / resize
   const repositionInk = () => setAuthMode(authMode);
@@ -235,37 +376,67 @@ export function initAuthUI({ onAuth } = {}) {
   onAuthChange(async (event) => {
     await refreshProfile();
     renderAuthState();
-    if (event?.event === "SIGNED_IN") {
-      closeAuth();
-      onSignedIn({ event, profile });
-    }
+    if (event?.event === "SIGNED_IN") closeAuth();
     if (event?.event === "SIGNED_OUT") {
       profile = null;
+      profileLoadedFor = null;
+      announcedSessionKey = null;
       renderAuthState();
       onSignedIn({ event, profile: null });
+      return;
     }
+    announceSession(event);
   });
 
   return initAuth().then(async () => {
     await refreshProfile();
     renderAuthState();
-    onSignedIn({ event: "INIT", profile });
+    announceSession("INIT");
+    // A failed OAuth round-trip lands back here with an error in the URL.
+    const oauthError = readOAuthError();
+    if (oauthError) {
+      openAuth("signin");
+      showError(oauthError.message);
+      return;
+    }
+    // Google sign-up has no college step — ask for one, once.
+    maybeAskForCollege();
   });
 }
 
-export async function refreshProfile() {
+/**
+ * Hand the session to the app exactly once. Supabase fires INITIAL_SESSION
+ * on subscribe and SIGNED_IN after the OAuth code exchange, so without this
+ * guard the whole dataset is fetched twice on every Google sign-in.
+ */
+function announceSession(event) {
+  const key = sessionKey();
+  if (!key || key === announcedSessionKey) return;
+  announcedSessionKey = key;
+  onSignedIn({ event, profile });
+}
+
+export async function refreshProfile({ force = false } = {}) {
   const user = getUser();
-  if (!user) { profile = null; return null; }
-  try {
-    profile = await getProfile(user.id);
-  } catch (err) {
-    console.warn("[UniHaat] profile fetch failed", err?.message);
-    profile = null;
-  }
-  return profile;
+  if (!user) { profile = null; profileLoadedFor = null; profilePromise = null; return null; }
+  // Reuse the in-flight request — INITIAL_SESSION, SIGNED_IN and INIT can
+  // all land within the same tick and would otherwise fetch three times.
+  if (!force && profilePromise && profileLoadedFor === user.id) return profilePromise;
+  profileLoadedFor = user.id;
+  profilePromise = (async () => {
+    try {
+      profile = await getProfile(user.id);
+    } catch (err) {
+      console.warn("[UniHaat] profile fetch failed", err?.message);
+      profile = null;
+    }
+    return profile;
+  })();
+  return profilePromise;
 }
 
 export function getProfileData() { return profile; }
+export { renderAuthState };
 export const authModeLabel = () => (getMode() === "live" ? "Synced with Supabase" : "Local mode — sign in to sync");
 
 /** Turn Supabase errors into something a student can act on. */

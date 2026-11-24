@@ -129,7 +129,14 @@ export async function signInWithGoogle() {
   const redirectTo = `${window.location.origin}${window.location.pathname}`;
   const { data, error } = await supa.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo, queryParams: { access_type: "offline", prompt: "consent" } },
+    options: {
+      redirectTo,
+      // GoTrue already requests an offline token for Google. Forcing
+      // `prompt=consent` on top of that makes Google show the consent
+      // screen on *every* sign-in, which returning students notice
+      // immediately — so only the offline flag is passed through.
+      queryParams: { access_type: "offline" },
+    },
   });
   if (error) throw error;
   return data;
@@ -167,6 +174,36 @@ export async function updateProfile(patch) {
     .eq("id", getUser()?.id)
     .select()
     .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/** The college reference data — short name ↔ id, needed to set a college. */
+export async function fetchColleges() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa
+    .from("colleges")
+    .select("id, short_name, name")
+    .order("name");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/**
+ * Ask the server to verify this student.
+ *
+ * `verified` is a server-owned column — students may not write it directly
+ * (that would let anyone claim "verified student" and inflate their own
+ * rating), so the request goes through a SECURITY DEFINER function.
+ */
+export async function claimVerification({ college, studentId } = {}) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("claim_student_verification", {
+    p_college_short: college || null,
+    p_student_id: studentId || null,
+  });
   if (error) throw error;
   return data;
 }

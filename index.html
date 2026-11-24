@@ -67,6 +67,27 @@
         <button class="btn btn-ghost auth-cta" id="mSignInBtn" type="button">Sign in</button>
       </div>
     </div>
+
+    <!-- PROFILE MENU — lives inside the sticky nav so it anchors to the
+         header; as a body child its `top` resolved against the page and it
+         rendered below the fold. -->
+    <div class="profile-menu" id="profileMenu" hidden>
+      <div class="profile-head">
+        <span class="avatar" id="menuAvatar">A</span>
+        <div>
+          <strong id="menuName">Student</strong>
+          <p class="fine" id="menuCollege">Not signed in</p>
+        </div>
+      </div>
+      <div class="profile-stats">
+        <div><strong id="menuDeals">0</strong><span>deals</span></div>
+        <div><strong id="menuRating">—</strong><span>rating</span></div>
+        <div><strong id="menuSaved">0</strong><span>saved</span></div>
+      </div>
+      <button class="profile-item" id="menuCollegeBtn" type="button" hidden>Choose your college</button>
+      <button class="profile-item" id="menuVerify" type="button">Verify as a student</button>
+      <button class="profile-item danger" id="signOutBtn" type="button">Sign out</button>
+    </div>
   </header>
 
   <main id="home">
@@ -393,22 +414,18 @@
     </div>
   </div>
 
-  <!-- PROFILE MENU -->
-  <div class="profile-menu" id="profileMenu" hidden>
-    <div class="profile-head">
-      <span class="avatar" id="menuAvatar">A</span>
-      <div>
-        <strong id="menuName">Student</strong>
-        <p class="fine" id="menuCollege">Not signed in</p>
-      </div>
+  <!-- COLLEGE PICKER (Google sign-up has no college step) -->
+  <div class="overlay" id="collegeOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="collegeTitle">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2 id="collegeTitle">Which campus are you on?</h2>
+      <p class="sub">Your college powers campus-only discovery — listings, demands and SafeSwap handovers near you.</p>
+      <form id="collegeForm">
+        <label>College / University<select name="college" id="collegePick" required></select></label>
+        <button class="btn btn-primary btn-block" type="submit">Save my college</button>
+        <p class="fine">You can change this later from your profile menu.</p>
+      </form>
     </div>
-    <div class="profile-stats">
-      <div><strong id="menuDeals">0</strong><span>deals</span></div>
-      <div><strong id="menuRating">—</strong><span>rating</span></div>
-      <div><strong id="menuSaved">0</strong><span>saved</span></div>
-    </div>
-    <button class="profile-item" id="menuVerify" type="button">Verify as a student</button>
-    <button class="profile-item danger" id="signOutBtn" type="button">Sign out</button>
   </div>
 
   <!-- SELL MODAL -->
@@ -446,8 +463,16 @@
       <p class="sub">Verified students can sell, post demands and use SafeSwap. Browsing is open to all.</p>
       <form id="verifyForm">
         <label>College email<input name="email" type="email" required placeholder="you@dtce.ac.in" /></label>
-        <label>College / University<select name="college" required>
-          <option value="">Select your college</option><option>Delhi Technological University (DTU)</option><option>University of Delhi (DU)</option><option>IIT Delhi</option><option>Jamia Millia Islamia</option><option>Amity University</option><option>IP University</option>
+        <label>College / University<select name="college" id="verifyCollege" required>
+          <option value="">Select your college</option>
+          <option value="DTU">Delhi Technological University</option>
+          <option value="DU">University of Delhi</option>
+          <option value="Hansraj">Hansraj College, DU</option>
+          <option value="IIT Delhi">IIT Delhi</option>
+          <option value="Jamia">Jamia Millia Islamia</option>
+          <option value="Amity">Amity University</option>
+          <option value="IPU">Indraprastha University</option>
+          <option value="NSUT">Netaji Subhas University of Technology</option>
         </select></label>
         <label>Student ID (optional)<input name="studentId" placeholder="DTU/2K23/… " /></label>
         <button class="btn btn-primary btn-block" type="submit">Send verification OTP</button>

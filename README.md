@@ -24,7 +24,8 @@ Live project `UniHaat` · ref `gzbmqwvybcmxlsgouhyh` · region `ap-south-1`.
 | **Schema** | 13 tables + an `impact_summary` view — `supabase/migrations/` |
 | **Automation** | Signup→profile trigger, UniMatch scoring, SafeSwap completion, rating aggregates |
 | **Security** | RLS on every table (36 policies), verified to block anonymous reads and writes |
-| **Auth** | Email + password, Google OAuth, sessions persisted in the browser |
+| **Reputation** | `verified`, `role` and the rating aggregates are server-owned columns — students write only their own name, college, bio and avatar |
+| **Auth** | Email + password, Google OAuth (PKCE), sessions persisted in the browser |
 
 The app boots from local seed data and **never waits on the network**. Sign in and it upgrades
 to live Postgres data; if Supabase is unreachable it keeps running locally and the status pill
@@ -32,7 +33,11 @@ in the nav reads *Local*.
 
 ### Google sign-in
 
-Google OAuth needs a client ID and secret that only exist in Google Cloud Console:
+Google OAuth is **enabled** on the project with a Google Cloud web-application client.
+The flow uses PKCE: the browser sends a `code_challenge`, and the returned code is exchanged
+for the session with a `code_verifier`.
+
+To re-apply the provider configuration:
 
 1. **APIs & Services → Credentials → Create credentials → OAuth client ID → Web application**
 2. Add the authorised redirect URI:
@@ -48,8 +53,8 @@ Google OAuth needs a client ID and secret that only exist in Google Cloud Consol
    ```
    …or in the dashboard: **Authentication → Providers → Google**.
 
-The button and the full OAuth round-trip are already implemented — only the provider
-credentials are missing.
+A student who arrives through Google has no college (the email sign-up path asks for one,
+the OAuth path cannot), so the app opens a college picker once and saves it to their profile.
 
 ## What's in the prototype
 
@@ -79,12 +84,15 @@ particles, magnetic buttons, word-by-word headline reveal, scroll progress, skel
 ```bash
 npm test          # provisions a headless Chromium, then runs the suite
 ```
-
 25 tests in `tests/unihaat.spec.js`: hero/grid, search, category & type filters, Passport +
 SafeSwap modal, SmartPrice (incl. condition selector), Demand Board + UniMatch relevance,
 SafeSwap completion, wishlist persistence, sell flow, chat, verification, UniImpact
 counters/bars, auth modal (tabs, Google, validation), sync status, motion layer, Supabase
 row mapping, mobile overflow, clipped-control detection and the mobile menu.
+
+7 tests in `tests/oauth.spec.js` drive the Google flow with GoTrue mocked at the network
+layer: the PKCE authorize URL, the consent-screen behaviour, the landing, the college
+picker, a denied sign-in, and the profile menu's position.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.

@@ -1,6 +1,6 @@
 import { PRODUCTS, DEMANDS, CATEGORIES, CLEARANCE, COLLEGES } from "./data.js";
 import * as SB from "./supabase.js";
-import { initAuthUI, getProfileData } from "./auth.js";
+import { initAuthUI, getProfileData, refreshProfile, renderAuthState } from "./auth.js";
 import {
   syncWishlist, syncListings, syncDemands,
   publishListing, publishDemand, persistWishlist,
@@ -458,10 +458,19 @@ $("#verifyBtn").addEventListener("click", () => openOverlay("#verifyOverlay"));
 $("#verifyForm").addEventListener("submit", async (e) => {
   e.preventDefault(); verified = true; localStorage.setItem("uh-verified", "1");
   $("#verifyBtn").textContent = "✓ Verified"; closeOverlays(); toast("Student verified — you can now sell & use SafeSwap");
-  // Persist the verified flag against the student's profile
+  // Persist the verified flag against the student's profile.
+  // `verified` is server-owned, so this goes through the RPC — a student
+  // must not be able to write that column directly.
   if (signedIn) {
     try {
-      await SB.updateProfile({ verified: true, verified_at: new Date().toISOString() });
+      const form = e.target;
+      await SB.claimVerification({
+        college: form.college.value || null,
+        studentId: form.studentId.value || null,
+      });
+      // Re-read the profile so the menu stops offering "Verify as a student".
+      await refreshProfile({ force: true });
+      renderAuthState();
       toast("Verification saved to your profile");
     } catch (err) {
       console.warn("[UniHaat] could not save verification", err?.message);

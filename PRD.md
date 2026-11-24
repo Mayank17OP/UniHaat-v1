@@ -299,7 +299,7 @@ Supporting: listings/week, demand match rate, median time-to-sell, wishlist→bu
 ## 15. Acceptance Criteria (v1 Prototype)
 
 All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`
-(25 tests, all passing). See §16 for the verification record.
+and `tests/oauth.spec.js` (32 tests, all passing). See §16 for the verification record.
 
 - [x] Browse/search/filter/sort 14 realistic listings; wishlist persists across reload.
 - [x] Product detail shows Passport, SmartPrice verdict, seller, chat entry, SafeSwap QR.
@@ -315,11 +315,16 @@ All criteria below are implemented and covered by the Playwright suite in `tests
       vendored, so the prototype renders identically offline.
 - [x] **Sign in / sign up with email + password**, persisted through Supabase Auth; the
       session survives a reload and the profile is created by a database trigger.
-- [x] **Google sign-in** is wired end to end (`signInWithOAuth` → redirect → session → profile).
+- [x] **Google sign-in** is wired end to end (`signInWithOAuth` → PKCE redirect → session →
+      profile) and covered by its own Playwright suite.
 - [x] **Wishlist, listings and demands persist to Postgres** when signed in, and fall back to
       local state when signed out or offline.
 - [x] **Row Level Security** is enabled on every table and verified to block anonymous reads
       of private data and anonymous writes.
+- [x] **A student cannot rewrite their own reputation** — `verified`, `role` and the rating
+      aggregates are server-owned columns; only the fields a student owns are writable.
+- [x] **A failed Google sign-in says so** — a denied consent screen reopens the auth modal
+      with an explanation instead of landing silently on the homepage.
 
 ---
 
@@ -362,6 +367,11 @@ Plus a `impact_summary` view aggregating the UniImpact counters.
 distance, and records the human-readable reasons shown in the UI. A category-only overlap is
 discarded — so a "calculator" demand never surfaces a lab coat.
 
+It scans demands in both `open` and `matched` state. The original version only scanned `open`,
+which meant that the moment a demand found its first match it flipped to `matched` and was
+permanently excluded from every later scan — a better listing published afterwards could
+never surface on a demand board that already had one hit.
+
 ### Security model
 RLS is enabled on all 13 tables with 36 policies. Verified against the live database:
 an anonymous role can read only public reference data, active listings and open demands; it
@@ -369,10 +379,37 @@ sees **0** wishlist, message and transaction rows; and an insert of a listing is
 *new row violates row-level security policy*. Private tables are reachable only through
 `auth.uid()` matching or the `is_staff()` helper.
 
+**Column-scoped profile writes.** The "students update own profile" policy is row-scoped, but
+RLS alone says nothing about *which columns* a row-scoped update may touch. A student could
+therefore `PATCH` any column of their own profile — including `verified`, `rating_sum` and
+`role`. That last one escalates: `is_staff()` reads `profiles.role`, so a student who sets
+`role = 'admin'` passes the staff check and can then edit every other student's verification
+and ratings. Both were reproduced against the live database before the fix.
+
+The fix (`0005_profile_column_grants.sql`) is a column-scoped grant:
+
+| Column group | Who may write it |
+|---|---|
+| `full_name`, `avatar_url`, `bio`, `department`, `year_of_study`, `college_id`, `student_id` | the student, on their own row |
+| `verified`, `verified_at` | the server only, via `claim_student_verification()` |
+| `role` | staff only, via `staff_update_profile()` |
+| `rating_sum`, `rating_count`, `deals_completed`, `saved_rupees`, `items_reused`, `items_given` | the server only, via `staff_update_profile()` |
+
+A profile also cannot be created pre-verified or pre-promoted: the insert policy now requires
+`verified = false and role = 'student'`. Both `claim_student_verification()` and
+`staff_update_profile()` are `SECURITY DEFINER`, so the browser never writes a
+server-owned column itself.
+
 ### Auth configuration
 Email/password enabled, `mailer_autoconfirm` on for demo friction, site URL and redirect
-allow-list set for `localhost:5173` and the preview host. Google OAuth requires a client ID
-and secret from Google Cloud Console — see `scripts/configure-google-auth.mjs`.
+allow-list set for `localhost:5173` and the preview host. Google OAuth is enabled with a
+Google Cloud web-application client; `scripts/configure-google-auth.mjs` applies the same
+configuration from the Management API.
+
+The Google flow uses **PKCE**: the client sends a `code_challenge` (S256) and exchanges the
+returned code for the session with a `code_verifier`. `prompt=consent` is deliberately *not*
+passed — GoTrue already requests an offline token for Google, and forcing the consent screen
+made every returning sign-in show it again.
 
 ---
 
