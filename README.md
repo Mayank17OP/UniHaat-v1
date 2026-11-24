@@ -23,7 +23,7 @@ Live project `UniHaat` · ref `gzbmqwvybcmxlsgouhyh` · region `ap-south-1`.
 |---|---|
 | **Schema** | 13 tables + an `impact_summary` view — `supabase/migrations/` |
 | **Automation** | Signup→profile trigger, UniMatch scoring, SafeSwap completion, rating aggregates |
-| **Security** | RLS on every table (36 policies), verified to block anonymous reads and writes |
+| **Security** | RLS forced on every table (36 policies), column-scoped grants, a server-only function surface, verified against the live database |
 | **Reputation** | `verified`, `role` and the rating aggregates are server-owned columns — students write only their own name, college, bio and avatar |
 | **Auth** | Email + password, Google OAuth (PKCE), sessions persisted in the browser |
 
@@ -98,10 +98,29 @@ picker, a denied sign-in, and the profile menu's position.
 number, they survive a frame timestamp that predates their start, they survive a clock
 that jumps backwards mid-animation, and they settle on the exact target value.
 
-That is 36 tests in total.
+4 tests in `tests/profile-privacy.spec.js` cover the profile read: the app names the
+columns it renders instead of asking for the whole row, and it never asks for the
+private columns (`email`, `student_id`, `role`) that the database does not grant to a
+client.
+
+That is 40 tests in total.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.
+
+There is a second, database-level suite that runs against a real Postgres rather than a
+mocked one:
+
+```bash
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 \
+     -f supabase/tests/security_regression.sql
+```
+
+It checks the privilege surface (column grants, function `EXECUTE`, the closed view,
+forced row level security) and then walks a handover from opening to completion and
+verifies that a student's rating aggregate is rebuilt from the review rows — after an
+insert, after an edit and after a removal. It runs inside a transaction that is rolled
+back at the end, so it never leaves anything behind.
 
 ## Deployment
 

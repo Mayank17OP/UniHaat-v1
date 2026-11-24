@@ -153,12 +153,41 @@ export async function signOut() {
 
 /* ---------------------------------------------------------------- profiles */
 
+/**
+ * The columns a client may read from `profiles`.
+ *
+ * The database grants the profile read column by column, and `email`,
+ * `student_id` and `role` are deliberately not on that list — they are the
+ * private and the privileged parts of a profile. Asking for `*` would ask
+ * for those columns too and the server would reject the whole query, so
+ * the app names the fields it renders instead.
+ */
+const PROFILE_FIELDS = [
+  "id",
+  "full_name",
+  "avatar_url",
+  "college_id",
+  "department",
+  "year_of_study",
+  "bio",
+  "verified",
+  "verified_at",
+  "rating_sum",
+  "rating_count",
+  "deals_completed",
+  "saved_rupees",
+  "items_reused",
+  "items_given",
+  "created_at",
+  "updated_at",
+].join(", ");
+
 export async function getProfile(userId) {
   const supa = getClient();
   if (!supa || !userId) return null;
   const { data, error } = await supa
     .from("profiles")
-    .select("*, colleges(id, short_name, name)")
+    .select(`${PROFILE_FIELDS}, colleges(id, short_name, name)`)
     .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -172,7 +201,7 @@ export async function updateProfile(patch) {
     .from("profiles")
     .update(patch)
     .eq("id", getUser()?.id)
-    .select()
+    .select(PROFILE_FIELDS)
     .maybeSingle();
   if (error) throw error;
   return data;
