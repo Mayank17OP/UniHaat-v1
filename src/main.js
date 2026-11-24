@@ -1,4 +1,14 @@
-import { PRODUCTS, DEMANDS, CATEGORIES, CLEARANCE } from "./data.js";
+import { PRODUCTS, DEMANDS, CATEGORIES, CLEARANCE, COLLEGES } from "./data.js";
+import * as SB from "./supabase.js";
+import { initAuthUI, getProfileData } from "./auth.js";
+import {
+  syncWishlist, syncListings, syncDemands,
+  publishListing, publishDemand, persistWishlist,
+} from "./persistence.js";
+import {
+  initScrollProgress, initCardStagger, burstHeart, initMagnetic,
+  initTilt, initTypeReveal, initLiveDots, showSkeletons, hideSkeletons,
+} from "./alive.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -9,6 +19,7 @@ let demands = [...DEMANDS];
 let wishlist = new Set(JSON.parse(localStorage.getItem("uh-wishlist") || "[]"));
 let state = { q: "", type: "all", cat: "all", scope: "all", sort: "distance" };
 let verified = localStorage.getItem("uh-verified") === "1";
+let signedIn = false;
 
 /* ---------- SmartPrice model (v1 rule-based) ---------- */
 const DEPRECIATION = { phones: 0.45, electronics: 0.55, furniture: 0.48, appliances: 0.58, books: 0.35, sports: 0.48, instruments: 0.42, hostel: 0.52 };
@@ -120,6 +131,7 @@ function renderGrid() {
       <div class="card-img">
         <img src="${p.img}" alt="${p.title}" loading="lazy" onerror="this.style.opacity=.15" />
         <span class="type-badge ${p.type}">${typeLabel(p)}</span>
+        ${p.live ? `<span class="live-chip"><i class="live-dot"></i>live</span>` : ""}
         <button class="heart ${saved ? "saved" : ""}" data-heart="${p.id}" aria-label="Save to wishlist" aria-pressed="${saved}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
         </button>
@@ -133,6 +145,9 @@ function renderGrid() {
     </article>`;
   }).join("");
   updateWishlistCount();
+  initCardStagger($("#productGrid"));
+  initTilt("#productGrid .card");
+  initLiveDots($("#productGrid"));
 }
 function updateWishlistCount() {
   $("#wishlistCount").textContent = wishlist.size;
@@ -172,9 +187,12 @@ $("#productGrid").addEventListener("click", (e) => {
   if (heart) {
     e.stopPropagation();
     const id = heart.dataset.heart;
-    if (wishlist.has(id)) { wishlist.delete(id); toast("Removed from wishlist"); }
-    else { wishlist.add(id); toast("Saved to wishlist — we’ll notify you on price changes"); }
-    renderGrid(); return;
+    const saving = !wishlist.has(id);
+    if (saving) { wishlist.add(id); burstHeart(heart); toast("Saved to wishlist — we’ll notify you on price changes"); }
+    else { wishlist.delete(id); toast("Removed from wishlist"); }
+    renderGrid();
+    if (signedIn) persistWishlist(id, saving);
+    return;
   }
   const card = e.target.closest(".card");
   if (card) openProduct(card.dataset.id);
@@ -312,7 +330,14 @@ function matchFor(d) {
 }
 function renderDemands() {
   $("#demandsList").innerHTML = demands.map((d) => {
-    const m = matchFor(d);
+    // Live demands carry server-computed UniMatch results; local ones are scored here
+    const live = Array.isArray(d.matches) && d.matches.length
+      ? d.matches.map((m) => {
+          const p = products.find((x) => x.id === m.listing_id) || m.listing;
+          return { p, reasons: m.reasons || [] };
+        }).filter((m) => m.p)
+      : null;
+    const m = live || matchFor(d);
     return `<article class="demand-card">
       <div class="row-between"><h3>${d.title}</h3><span class="verdict ${m.length ? "verdict-good" : "verdict-fair"}">${m.length ? `${m.length} UniMatch${m.length > 1 ? "es" : ""}` : "Waiting for match"}</span></div>
       <p class="demand-meta">${d.user} · ${d.college} · Budget ${fmt(d.budget)} · Needed by ${d.neededBy || "flexible"}${d.notes ? " · " + d.notes : ""}</p>
@@ -323,10 +348,23 @@ function renderDemands() {
 $("#demandForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  demands.unshift({ id: "d" + Date.now(), title: f.get("title"), category: f.get("category"), budget: +f.get("budget"), college: "DTU", neededBy: f.get("neededBy"), user: "You", notes: f.get("notes") });
+  const profile = getProfileData();
+  const demand = {
+    id: "d" + Date.now(), title: f.get("title"), category: f.get("category"), budget: +f.get("budget"),
+    college: profile?.colleges?.short_name || "DTU", neededBy: f.get("neededBy"),
+    user: profile?.full_name || "You", notes: f.get("notes") || "",
+  };
+  demands.unshift(demand);
   renderDemands(); e.target.reset();
-  const m = matchFor(demands[0]);
+  const m = matchFor(demand);
   toast(m.length ? `Demand posted — UniMatch found ${m.length} match${m.length > 1 ? "es" : ""} already!` : "Demand posted — UniMatch will notify you on a match");
+
+  if (signedIn) {
+    publishDemand(demand).then((row) => {
+      if (row) toast("Demand saved to the board");
+      else toast("Posted locally — sign in to keep it on the board");
+    });
+  }
 });
 
 /* ---------- Clearance ---------- */
@@ -387,26 +425,50 @@ $("#sellForm").addEventListener("input", sellHint);
 $("#sellForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const f = e.target;
+  const profile = getProfileData();
   const p = {
     id: "p" + Date.now(), title: f.title.value, price: +f.price.value || 0, original: +f.original.value || +f.price.value,
     type: f.type.value, category: f.category.value, condition: f.condition.value, ageMonths: +f.age.value || 6,
-    distance: 0.2, college: "DTU", scope: "same", seller: "You", rating: 5.0, deals: 0,
+    distance: 0.2, college: profile?.colleges?.short_name || "DTU", scope: "same",
+    seller: profile?.full_name || "You", rating: 5.0, deals: 0,
     img: "./assets/kettle.svg",
     desc: f.description.value || "Listed via UniHaat Sell.", accessories: "As described", repairs: "None", battery: null, clearance: false, created: 0,
   };
   products.unshift(p); renderGrid(); closeOverlays(); f.reset(); $("#sellSmartHint").textContent = "SmartPrice: enter original price + age for a recommendation.";
   toast("Listing published — UniMatch is notifying matching demands");
   $("#marketplace").scrollIntoView({ behavior: "smooth" });
+
+  // Persist to Supabase when signed in (fire-and-forget; the row is live)
+  if (signedIn) {
+    publishListing(p).then((row) => {
+      if (row) {
+        p.id = row.id;
+        p.live = true;
+        renderGrid();
+        toast("Listing saved to your Supabase account");
+      } else {
+        toast("Published locally — sign in to keep it in the cloud");
+      }
+    });
+  }
 });
 
 /* ---------- Verify ---------- */
 $("#verifyBtn").addEventListener("click", () => openOverlay("#verifyOverlay"));
-$("#verifyForm").addEventListener("submit", (e) => {
+$("#verifyForm").addEventListener("submit", async (e) => {
   e.preventDefault(); verified = true; localStorage.setItem("uh-verified", "1");
   $("#verifyBtn").textContent = "✓ Verified"; closeOverlays(); toast("Student verified — you can now sell & use SafeSwap");
+  // Persist the verified flag against the student's profile
+  if (signedIn) {
+    try {
+      await SB.updateProfile({ verified: true, verified_at: new Date().toISOString() });
+      toast("Verification saved to your profile");
+    } catch (err) {
+      console.warn("[UniHaat] could not save verification", err?.message);
+    }
+  }
 });
 if (verified) $("#verifyBtn").textContent = "✓ Verified";
-$("#avatarBtn").addEventListener("click", () => toast(verified ? "Aarav S. · DTU · ★ 4.9 · 12 deals · Verified" : "Verify as a student to unlock selling & SafeSwap"));
 
 /* ---------- SafeSwap demo ---------- */
 let swapStep = 0;
@@ -436,3 +498,45 @@ $("#mVerifyBtn").addEventListener("click", () => { $("#mobileMenu").classList.re
 
 /* ---------- Init ---------- */
 renderGrid(); renderDemands(); renderSmart(); newSwapCode();
+initScrollProgress();
+initMagnetic();
+initTypeReveal("[data-reveal-type]");
+
+/* ---------- Auth + sync ---------- */
+initAuthUI({
+  onAuth: async ({ event }) => {
+    signedIn = SB.isSignedIn();
+
+    if (signedIn) {
+      // Bring the cloud state down into the UI
+      const [ids, liveListings, liveDemands] = await Promise.all([
+        syncWishlist(), syncListings(), syncDemands(),
+      ]);
+      if (ids) {
+        wishlist = new Set(ids);
+        localStorage.setItem("uh-wishlist", JSON.stringify([...wishlist]));
+        updateWishlistCount();
+      }
+      if (liveListings?.length) {
+        // Live rows replace their local twin (same title + seller), then join
+        const merged = [...liveListings];
+        products.forEach((local) => {
+          const dupe = liveListings.find((l) => l.title === local.title && l.seller === local.seller);
+          if (!dupe) merged.push(local);
+        });
+        products = merged;
+      }
+      if (liveDemands?.length) {
+        const merged = [...liveDemands];
+        demands.forEach((local) => {
+          if (!liveDemands.some((d) => d.title === local.title)) merged.push(local);
+        });
+        demands = merged;
+      }
+      renderGrid(); renderDemands();
+      toast("Signed in — your listings and wishlist are in sync");
+    } else if (event === "SIGNED_OUT") {
+      toast("Signed out");
+    }
+  },
+});

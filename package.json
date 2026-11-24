@@ -1,17 +1,22 @@
 {
   "name": "unihaat-v1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "UniHaat — Your Campus. Your Marketplace. Verified hyperlocal student-to-student marketplace.",
   "type": "module",
   "scripts": {
     "dev": "python3 -m http.server 5173 --bind 0.0.0.0",
     "setup:browser": "node scripts/setup-browser.mjs",
+    "setup:assets": "node scripts/make-assets.mjs && node scripts/make-fonts.mjs && node scripts/vendor-supabase.mjs",
+    "setup:google": "node scripts/configure-google-auth.mjs",
     "test": "node scripts/setup-browser.mjs && npx playwright test"
   },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0"
+  },
   "devDependencies": {
-    "@fontsource/fraunces": "^5.3.0",
-    "@fontsource/inter": "^5.3.0",
-    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/fraunces": "^5.2.5",
+    "@fontsource/inter": "^5.2.5",
+    "@fontsource/jetbrains-mono": "^5.2.5",
     "@playwright/test": "^1.49.0",
     "@sparticuz/chromium": "^153.0.0"
   }

@@ -1,0 +1,310 @@
+// UniHaat — Supabase data layer.
+//
+// Every helper degrades gracefully: if Supabase is unreachable or not
+// configured, the app falls back to the local in-memory/localStorage store so
+// the prototype always renders. `mode` tells the UI which path it is on.
+
+import { CONFIG, isSupabaseConfigured } from "./config.js";
+
+const listeners = new Set();
+let client = null;
+let session = null;
+let mode = "local"; // "local" | "live"
+
+const HINT = "uh-hint";
+
+/* ------------------------------------------------------------------ client */
+
+function getClient() {
+  if (client) return client;
+  if (!isSupabaseConfigured()) return null;
+  if (typeof window === "undefined" || !window.supabase) return null;
+  client = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      flowType: "pkce",
+    },
+  });
+  return client;
+}
+
+/* ------------------------------------------------------------------- state */
+
+export const getMode = () => mode;
+export const getSession = () => session;
+export const getUser = () => session?.user ?? null;
+export const isSignedIn = () => Boolean(session?.user);
+
+export function onAuthChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+function emit(event) {
+  listeners.forEach((fn) => {
+    try {
+      fn(event);
+    } catch (err) {
+      console.error("[UniHaat] auth listener failed", err);
+    }
+  });
+}
+
+/* -------------------------------------------------------------------- auth */
+
+export async function initAuth() {
+  const supa = getClient();
+  if (!supa) {
+    mode = "local";
+    return null;
+  }
+  try {
+    // Never let a slow or unreachable auth server hold up the first paint.
+    const { data, error } = await withTimeout(
+      supa.auth.getSession(),
+      4000,
+      "auth session timed out"
+    );
+    if (error) throw error;
+    session = data.session;
+    mode = session ? "live" : "local";
+
+    supa.auth.onAuthStateChange((event, nextSession) => {
+      session = nextSession;
+      mode = nextSession ? "live" : "local";
+      emit({ event, session: nextSession });
+    });
+    return session;
+  } catch (err) {
+    console.warn("[UniHaat] Supabase unreachable, running in local mode:", err?.message);
+    mode = "local";
+    return null;
+  }
+}
+
+/** Reject a promise that takes longer than `ms`. */
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+
+export async function signUp({ email, password, fullName, college }) {
+  const supa = getClient();
+  if (!supa) throw new Error("Supabase is not configured for this deployment.");
+  const { data, error } = await supa.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        full_name: fullName,
+        college,
+        // The signup trigger links the college by short name.
+        college_short: college,
+        avatar_url: null,
+      },
+    },
+  });
+  if (error) throw error;
+  session = data.session;
+  mode = session ? "live" : "local";
+  return data;
+}
+
+export async function signIn({ email, password }) {
+  const supa = getClient();
+  if (!supa) throw new Error("Supabase is not configured for this deployment.");
+  const { data, error } = await supa.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  session = data.session;
+  mode = session ? "live" : "local";
+  return data;
+}
+
+export async function signInWithGoogle() {
+  const supa = getClient();
+  if (!supa) throw new Error("Supabase is not configured for this deployment.");
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  const { data, error } = await supa.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo, queryParams: { access_type: "offline", prompt: "consent" } },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function signOut() {
+  const supa = getClient();
+  if (!supa) return;
+  const { error } = await supa.auth.signOut();
+  if (error) throw error;
+  session = null;
+  mode = "local";
+}
+
+/* ---------------------------------------------------------------- profiles */
+
+export async function getProfile(userId) {
+  const supa = getClient();
+  if (!supa || !userId) return null;
+  const { data, error } = await supa
+    .from("profiles")
+    .select("*, colleges(id, short_name, name)")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProfile(patch) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa
+    .from("profiles")
+    .update(patch)
+    .eq("id", getUser()?.id)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/* ---------------------------------------------------------------- listings */
+
+export async function fetchListings({ category, type, search } = {}) {
+  const supa = getClient();
+  if (!supa) return null;
+  let query = supa
+    .from("listings")
+    .select("*, listing_images(url, alt, sort), profiles(id, full_name, avatar_url, rating_sum, rating_count, deals_completed, verified, colleges(short_name))")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (category && category !== "all") query = query.eq("category_slug", category);
+  if (type && type !== "all") query = query.eq("listing_type", type);
+  if (search) query = query.ilike("title", `%${search}%`);
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createListing(listing) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa
+    .from("listings")
+    .insert(listing)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function addListingImage(listingId, url, alt) {
+  const supa = getClient();
+  if (!supa || !listingId || !url) return null;
+  const { data, error } = await supa
+    .from("listing_images")
+    .insert({ listing_id: listingId, url, alt: alt || null, sort: 0 })
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/* ---------------------------------------------------------------- wishlist */
+
+export async function fetchWishlist() {
+  const supa = getClient();
+  const userId = getUser()?.id;
+  if (!supa || !userId) return null;
+  const { data, error } = await supa
+    .from("wishlists")
+    .select("listing_id")
+    .eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.listing_id);
+}
+
+export async function addToWishlist(listingId) {
+  const supa = getClient();
+  const userId = getUser()?.id;
+  if (!supa || !userId) return null;
+  const { error } = await supa.from("wishlists").insert({ user_id: userId, listing_id: listingId });
+  if (error && error.code !== "23505") throw error; // already saved is fine
+  return listingId;
+}
+
+export async function removeFromWishlist(listingId) {
+  const supa = getClient();
+  const userId = getUser()?.id;
+  if (!supa || !userId) return null;
+  const { error } = await supa.from("wishlists").delete().eq("user_id", userId).eq("listing_id", listingId);
+  if (error) throw error;
+  return listingId;
+}
+
+/* ----------------------------------------------------------------- demands */
+
+export async function fetchDemands() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa
+    .from("demands")
+    .select("*, colleges(short_name), profiles(id, full_name), demand_matches(listing_id, score, reasons)")
+    // 'matched' demands still belong on the board — that is the good news.
+    .in("status", ["open", "matched"])
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createDemand(demand) {
+  const supa = getClient();
+  const userId = getUser()?.id;
+  if (!supa || !userId) return null;
+  const { data, error } = await supa
+    .from("demands")
+    .insert({ ...demand, user_id: userId })
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/* ------------------------------------------------------------- transactions */
+
+export async function createTransaction(txn) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa
+    .from("transactions")
+    .insert(txn)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTransaction(id, patch) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa
+    .from("transactions")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/* ------------------------------------------------------------------- misc */
+
+export const hint = (text) => {
+  const el = document.querySelector(`[data-hint="${HINT}"]`);
+  if (el) el.textContent = text;
+};

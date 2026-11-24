@@ -1,4 +1,15 @@
 // UniHaat seed data — realistic Delhi campus listings
+export const COLLEGES = [
+  { short: "DTU", label: "Delhi Technological University" },
+  { short: "DU", label: "University of Delhi" },
+  { short: "Hansraj", label: "Hansraj College, DU" },
+  { short: "IIT Delhi", label: "IIT Delhi" },
+  { short: "Jamia", label: "Jamia Millia Islamia" },
+  { short: "Amity", label: "Amity University" },
+  { short: "IPU", label: "Indraprastha University" },
+  { short: "NSUT", label: "Netaji Subhas University of Technology" },
+];
+
 export const CATEGORIES = [
   { id: "furniture", label: "Furniture", icon: "M4 11V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4M2 13h20v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-4Z" },
   { id: "electronics", label: "Electronics", icon: "M13 2 4 14h6l-1 8 9-12h-6l1-8Z" },

@@ -299,7 +299,7 @@ Supporting: listings/week, demand match rate, median time-to-sell, wishlist→bu
 ## 15. Acceptance Criteria (v1 Prototype)
 
 All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`
-(16 tests, all passing). See §16 for the verification record.
+(21 tests, all passing). See §16 for the verification record.
 
 - [x] Browse/search/filter/sort 14 realistic listings; wishlist persists across reload.
 - [x] Product detail shows Passport, SmartPrice verdict, seller, chat entry, SafeSwap QR.
@@ -311,28 +311,97 @@ All criteria below are implemented and covered by the Playwright suite in `tests
 - [x] SafeSwap flow: generate → simulate scan → completed.
 - [x] UniImpact counters animate to final values; progress bars fill on reveal.
 - [x] Playwright suite passes; reduced-motion respected; no horizontal overflow from 320–1440px.
-- [x] Zero third-party runtime requests — fonts and illustrations are self-hosted, so the
-      prototype renders identically offline.
+- [x] Zero third-party runtime requests — fonts, illustrations and the Supabase client are all
+      vendored, so the prototype renders identically offline.
+- [x] **Sign in / sign up with email + password**, persisted through Supabase Auth; the
+      session survives a reload and the profile is created by a database trigger.
+- [x] **Google sign-in** is wired end to end (`signInWithOAuth` → redirect → session → profile).
+- [x] **Wishlist, listings and demands persist to Postgres** when signed in, and fall back to
+      local state when signed out or offline.
+- [x] **Row Level Security** is enabled on every table and verified to block anonymous reads
+      of private data and anonymous writes.
+
+---
+
+## 15A. Backend — Supabase
+
+**Project:** `UniHaat` · ref `gzbmqwvybcmxlsgouhyh` · region `ap-south-1` · Postgres 17.
+
+### Schema (13 tables)
+
+| Table | Purpose | Key columns |
+|---|---|---|
+| `profiles` | 1:1 with `auth.users`; identity + reputation | `college_id`, `verified`, `rating_sum/count`, `deals_completed`, `saved_rupees`, `items_reused`, `items_given` |
+| `colleges` | Campus reference data | `short_name`, `scope` (same / university / nearby) |
+| `categories` | Listing categories | `slug`, `label`, `sort` |
+| `listings` | The marketplace inventory | `listing_type`, `status`, `price`, `original_price`, `condition`, `age_months`, `accessories`, `repair_history`, `battery_health`, `seller_attested`, `is_clearance`, `distance_km`, `negotiable` |
+| `listing_images` | Images per listing | `listing_id`, `url`, `sort` |
+| `wishlists` | Saved listings (private) | PK `(user_id, listing_id)` |
+| `demands` | Demand Board posts | `budget_max`, `needed_by`, `status`, `expires_at` |
+| `demand_matches` | UniMatch results | `score`, `reasons[]`, `notified` |
+| `conversations` | Chat threads | `buyer_id`, `seller_id`, `listing_id` |
+| `messages` | Chat messages | `body`, `read_at` |
+| `transactions` | SafeSwap handovers | `swap_code`, `status`, `buyer/seller_confirmed_at`, `completed_at` |
+| `reviews` | Ratings after a completed deal | `rating`, `body`, `condition_match` |
+| `reports` | Moderation queue | `reason`, `status`, `details` |
+
+Plus a `impact_summary` view aggregating the UniImpact counters.
+
+### Automation (triggers + functions)
+
+| Trigger | Effect |
+|---|---|
+| `on_auth_user_created` | Creates a `profiles` row on signup and links the college chosen at signup. |
+| `on_listing_published` | Runs UniMatch for the listing against every open demand. |
+| `on_demand_created` | Re-scores open demands against existing inventory. |
+| `on_transaction_completed` | Marks the listing `sold`, increments both students' deal counts, reuse and savings. |
+| `on_review_created` | Updates the seller's rating aggregate; rejects reviews without a completed transaction. |
+| `set_updated_at` | Maintains `updated_at` on profiles, listings and conversations. |
+
+`refresh_demand_matches()` scores candidates on **keyword relevance first**, then budget and
+distance, and records the human-readable reasons shown in the UI. A category-only overlap is
+discarded — so a "calculator" demand never surfaces a lab coat.
+
+### Security model
+RLS is enabled on all 13 tables with 36 policies. Verified against the live database:
+an anonymous role can read only public reference data, active listings and open demands; it
+sees **0** wishlist, message and transaction rows; and an insert of a listing is rejected with
+*new row violates row-level security policy*. Private tables are reachable only through
+`auth.uid()` matching or the `is_staff()` helper.
+
+### Auth configuration
+Email/password enabled, `mailer_autoconfirm` on for demo friction, site URL and redirect
+allow-list set for `localhost:5173` and the preview host. Google OAuth requires a client ID
+and secret from Google Cloud Console — see `scripts/configure-google-auth.mjs`.
 
 ---
 
 ## 16. Build Record (this prototype)
 
 ### Stack
-Zero-framework vanilla HTML/CSS/JS (ES modules) + Playwright. No build step, no bundler.
-Rationale: the prototype should be readable and editable in a browser, and runnable with a
-single static server.
+Zero-framework vanilla HTML/CSS/JS (ES modules) + Supabase + Playwright. No build step, no
+bundler. Rationale: the prototype should be readable and editable in a browser, and runnable
+with a single static server.
 
 ```
-index.html          App shell — all sections, modals, drawer
+index.html          App shell — all sections, modals, drawer, auth modal, profile menu
 src/style.css       Design system (tokens, components, motion)
-src/data.js         Seed listings, demands, categories
+src/data.js         Seed listings, demands, categories, colleges
 src/main.js         Marketplace, SmartPrice, UniMatch, SafeSwap, wishlist, chat
+src/supabase.js     Supabase client + data layer (auth, listings, wishlist, demands)
+src/persistence.js  Row ↔ UI model mapping and sync helpers
+src/auth.js         Sign in / sign up / Google UI and profile menu
+src/alive.js        The motion layer — stagger, tilt, magnetic, particles, type reveal
+src/config.js       Project URL + publishable key (public by design)
 assets/*.svg        14 product illustrations, generated by scripts/make-assets.mjs
 assets/fonts/*.woff2  Self-hosted Fraunces / Inter / JetBrains Mono
-scripts/make-assets.mjs  Regenerates the illustrations
-scripts/make-fonts.mjs   Re-copies font files out of node_modules
-scripts/setup-browser.mjs Provisions a headless Chromium for Playwright
+vendor/supabase.js  Vendored Supabase browser client (no CDN request)
+supabase/migrations/  SQL migrations, applied to the live project
+scripts/make-assets.mjs      Regenerates the illustrations
+scripts/make-fonts.mjs       Re-copies font files out of node_modules
+scripts/vendor-supabase.mjs  Re-vendors the Supabase browser client
+scripts/setup-browser.mjs    Provisions a headless Chromium for Playwright
+scripts/configure-google-auth.mjs  Enables Google OAuth via the Management API
 ```
 
 ### Running
@@ -340,6 +409,7 @@ scripts/setup-browser.mjs Provisions a headless Chromium for Playwright
 npm install
 npm run dev        # static server on :5173
 npm test           # provisions the browser, then runs the Playwright suite
+npm run setup:assets   # regenerate illustrations, fonts and the vendored client
 ```
 
 ### Implementation notes
@@ -347,19 +417,40 @@ npm test           # provisions the browser, then runs the Playwright suite
   multiplier × age decay × accessories factor — not a black box. It is deterministic and
   explainable, and each listing carries a verdict (Good deal / Fair price / Above SmartPrice)
   derived by comparing the asking price to the computed recommendation.
-- **UniMatch** scores candidates on category **and** keyword relevance, then budget and distance.
-  A category-only match is discarded, so a "calculator" demand never surfaces a lab coat.
+- **UniMatch** runs in the database (`refresh_demand_matches`) and is mirrored by a client-side
+  scorer for instant feedback. Both score keyword relevance first, then budget and distance, and
+  discard category-only overlaps.
 - **SafeSwap QR** is drawn to a `<canvas>` from a seeded PRNG (deterministic per transaction code)
   with finder patterns, so it looks like a real scannable code without an external QR library.
-- **Wishlist** and **verification state** persist in `localStorage`; the rest is in-memory.
+- **Offline-first**: the app boots from local seed data and never waits on the network. When a
+  session exists it upgrades to live data; if Supabase is unreachable it keeps running locally
+  and the status pill reads *Local* rather than breaking.
 - **Illustrations** are hand-authored line art in the brand palette rather than stock photos,
   which keeps the prototype offline-capable and visually consistent with the type system.
 
+### The motion layer (`src/alive.js`)
+Motion is treated as a response to input rather than decoration. Every primitive animates
+`transform` and `opacity` only, and every one is disabled under `prefers-reduced-motion`.
+
+| Primitive | Behaviour |
+|---|---|
+| `initCardStagger` | Grid cards rise in with an incremental delay, so the grid reads as one object arriving. |
+| `initTilt` | A ~4° tilt plus a cursor-following glow on hover — a card being lifted, not a gimmick. |
+| `burstHeart` | The heart springs and throws six particles when a listing is saved. |
+| `initMagnetic` | Primary buttons lean toward the cursor by up to 5px. |
+| `initTypeReveal` | Headline words rise in sequence, preserving `<br>` and accent spans. |
+| `initScrollProgress` | A hairline progress bar tracks scroll depth. |
+| `showSkeletons` | Shimmering placeholders while a remote fetch is in flight. |
+| `copyWithFeedback` | Clipboard writes flash a confirmation on the button. |
+
 ### Known limitations (deliberate for v1)
-- No backend: listings, demands and chat are seeded and reset on reload.
-- Chat is a scripted mock, not real-time messaging.
-- Verification accepts any college email (no OTP round-trip).
+- Chat is a scripted mock; realtime messaging and push notifications are v1.2.
+- The app-level student verification (college email + OTP) is still a stub; Supabase Auth
+  handles identity, but the college-ownership check is not yet wired to a mail provider.
+- Google OAuth needs a client ID and secret from Google Cloud Console — see
+  `scripts/configure-google-auth.mjs`.
 - SmartPrice does not yet learn from real comparable listings — that is v2.
+- Email autoconfirm is enabled for demo friction and should be turned off in production.
 
 ---
 

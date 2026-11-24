@@ -160,6 +160,143 @@ test("mobile menu opens and triggers sell flow", async ({ page }) => {
   await expect(page.locator("#sellOverlay")).toBeVisible();
 });
 
+test("auth modal switches between sign in and sign up", async ({ page }) => {
+  await page.goto(BASE);
+  await expect(page.locator("#signInBtn")).toBeVisible();
+  await page.click("#signInBtn");
+  await expect(page.locator("#authOverlay")).toBeVisible();
+
+  // Sign in mode: no signup fields
+  await expect(page.locator("#nameField")).toBeHidden();
+  await expect(page.locator("#collegeField")).toBeHidden();
+  await expect(page.locator("#authSubmit")).toHaveText("Sign in");
+
+  // Sign up mode: name + college appear
+  await page.click('[data-authtab="signup"]');
+  await expect(page.locator("#nameField")).toBeVisible();
+  await expect(page.locator("#collegeField")).toBeVisible();
+  await expect(page.locator("#authSubmit")).toHaveText("Create account");
+  await expect(page.locator("#authCollege option")).toHaveCount(9);
+});
+
+test("auth modal offers Google sign-in", async ({ page }) => {
+  await page.goto(BASE);
+  await page.click("#signInBtn");
+  const google = page.locator("#googleBtn");
+  await expect(google).toBeVisible();
+  await expect(google).toContainText("Continue with Google");
+  // The real Google mark, not a generic icon
+  await expect(google.locator("svg path")).toHaveCount(4);
+});
+
+test("signup form validates before hitting the network", async ({ page }) => {
+  await page.goto(BASE);
+  await page.click("#signInBtn");
+  await page.click('[data-authtab="signup"]');
+  await page.fill("#authForm [name=fullName]", "Test Student");
+  await page.selectOption("#authForm [name=college]", "DTU");
+  await page.fill("#authForm [name=email]", "test@dtu.ac.in");
+  await page.fill("#authForm [name=password]", "short");
+  await page.click("#authSubmit");
+  await expect(page.locator("#authError")).toContainText("at least 6 characters");
+});
+
+test("sync status pill reports the connection state", async ({ page }) => {
+  await page.goto(BASE);
+  const pill = page.locator("#syncPill");
+  await expect(pill).toBeVisible();
+  // Offline / unreachable backend must degrade to local mode, not break the UI
+  await expect(pill).toHaveAttribute("data-state", /local|live/);
+  await expect(page.locator("#syncText")).not.toBeEmpty();
+});
+
+test("motion layer adds reveal classes and a scroll progress bar", async ({ page }) => {
+  await page.goto(BASE);
+  await page.waitForTimeout(1200);
+  // Cards stagger in
+  const card = page.locator("#productGrid .card").first();
+  await expect(card).toHaveClass(/stagger/);
+  // Headline words are wrapped but the markup survives
+  await expect(page.locator("h1 .accent")).toHaveCount(1);
+  await expect(page.locator("h1 .accent .word").first()).toBeVisible();
+  // Scroll progress scales with the page
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(400);
+  const scale = await page.evaluate(() => {
+    const bar = document.querySelector("#scrollProgress i");
+    const m = new DOMMatrixReadOnly(getComputedStyle(bar).transform);
+    return m.a;
+  });
+  expect(scale).toBeGreaterThan(0.9);
+});
+
+test("Supabase row mapping produces valid UI models", async ({ page }) => {
+  await page.goto(BASE);
+  // Map a row shaped exactly like the `listings` table returns
+  const listing = await page.evaluate(async () => {
+    const { listingFromRow } = await import("./src/persistence.js");
+    return listingFromRow({
+      id: "aaaa1111-0000-0000-0000-000000000001",
+      title: "Study Table + Chair Combo",
+      listing_type: "sell",
+      category_slug: "furniture",
+      price: "2499.00",
+      original_price: "5200.00",
+      condition: "Like new",
+      age_months: 8,
+      distance_km: "0.40",
+      description: "Solid wood study table.",
+      accessories: "Table, chair, keys",
+      repair_history: "None",
+      battery_health: null,
+      is_clearance: false,
+      listing_images: [{ url: "./assets/table-chair.svg", sort: 0 }],
+      profiles: {
+        id: "11111111-1111-1111-1111-111111111111",
+        full_name: "Aarav Sharma",
+        rating_sum: 24, rating_count: 5, deals_completed: 12, verified: true,
+        colleges: { short_name: "DTU" },
+      },
+    });
+  });
+  expect(listing.type).toBe("sell");
+  expect(listing.price).toBe(2499);
+  expect(listing.original).toBe(5200);
+  expect(listing.ageMonths).toBe(8);
+  expect(listing.distance).toBe(0.4);
+  expect(listing.college).toBe("DTU");
+  expect(listing.seller).toBe("Aarav Sharma");
+  expect(listing.rating).toBe(4.8);
+  expect(listing.img).toBe("./assets/table-chair.svg");
+  expect(listing.live).toBe(true);
+});
+
+test("Supabase demand row mapping carries UniMatch reasons", async ({ page }) => {
+  await page.goto(BASE);
+  const demand = await page.evaluate(async () => {
+    const { demandFromRow } = await import("./src/persistence.js");
+    return demandFromRow({
+      id: "bbbb1111-0000-0000-0000-000000000001",
+      title: "Scientific calculator fx-991",
+      notes: "Urgent for end-sem exams",
+      category_slug: "electronics",
+      budget_max: "800.00",
+      needed_by: null,
+      status: "matched",
+      profiles: { id: "11111111-1111-1111-1111-111111111111", full_name: "Aarav Sharma" },
+      demand_matches: [{
+        listing_id: "aaaa1111-0000-0000-0000-000000000002",
+        score: "0.743",
+        reasons: ["Category ✓", "Keyword ✓", "Within budget ✓"],
+      }],
+    });
+  });
+  expect(demand.budget).toBe(800);
+  expect(demand.user).toBe("Aarav Sharma");
+  expect(demand.matches).toHaveLength(1);
+  expect(demand.matches[0].reasons).toContain("Keyword ✓");
+});
+
 test("student verification unlocks selling", async ({ page }) => {
   await page.goto(BASE);
   await page.click("#verifyBtn");
