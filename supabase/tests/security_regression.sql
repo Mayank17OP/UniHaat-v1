@@ -338,6 +338,10 @@ end $$;
 --    the admin API.
 -- ---------------------------------------------------------------------------
 
+-- The writes below are the database's own, so they need the script's
+-- privileges rather than a student's.
+reset role;
+
 do $$
 declare
   v_trigger text;
@@ -509,29 +513,37 @@ end $$;
 
 -- The verification asks for evidence: a college address and a roll number.
 -- Without the roll number the student stays unverified.
+--
+-- The reset has to happen while the script still has its own privileges --
+-- the point of the checks below is that the *client* cannot do this.
+reset role;
+
+update public.profiles p
+   set verified = false, student_id = null
+  from auth.users u
+ where u.id = p.id
+   and u.id = :'buyer'::uuid
+   and split_part(lower(coalesce(u.email, '')), '@', 2)
+       not in ('gmail.com', 'yahoo.com', 'outlook.com');
+
+select set_config('request.jwt.claim.sub', :'buyer', true);
+select set_config('request.jwt.claims', '{"sub":"' || :'buyer' || '","role":"authenticated"}', true);
+set local role authenticated;
+
 do $$
 declare
-  v_target uuid := current_setting('uni.regression.buyer')::uuid;
-  v_email  text;
-  v_row    public.profiles;
+  v_row public.profiles;
 begin
-  select u.email into v_email from auth.users u where u.id = v_target;
-  v_email := lower(coalesce(v_email, ''));
+  -- A college address with no roll number is not enough.
+  v_row := public.claim_student_verification(null, null);
+  if v_row.verified then
+    raise exception 'a student was verified without any evidence';
+  end if;
 
-  if split_part(v_email, '@', 2) not in ('gmail.com', 'yahoo.com', 'outlook.com') then
-    -- A college address with no roll number is not enough.
-    update public.profiles set verified = false, student_id = null where id = v_target;
-
-    v_row := public.claim_student_verification(null, null);
-    if v_row.verified then
-      raise exception 'a student was verified without any evidence';
-    end if;
-
-    -- With one, it is.
-    v_row := public.claim_student_verification(null, 'REGRESSION/1/2023');
-    if not v_row.verified then
-      raise exception 'a student with a college address and a roll number was not verified';
-    end if;
+  -- With one, it is.
+  v_row := public.claim_student_verification(null, 'REGRESSION/1/2023');
+  if not v_row.verified then
+    raise exception 'a student with a college address and a roll number was not verified';
   end if;
 end $$;
 
