@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UniHaat — Your Campus. Your Marketplace.</title>
+  <meta name="description" content="UniHaat is a verified, hyperlocal student-to-student marketplace. Buy, sell, rent, exchange and give away — within your campus." />
+  <link rel="preload" href="./assets/fonts/fraunces-900.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="./assets/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <a class="skip" href="#marketplace">Skip to marketplace</a>
+
+  <!-- TICKER -->
+  <div class="ticker" aria-label="Campus ticker">
+    <div class="ticker-track" id="tickerTrack">
+      <span>Verified students only</span><i>•</i><span>DU</span><i>•</i><span>DTU</span><i>•</i><span>IIT Delhi</span><i>•</i><span>Jamia Millia</span><i>•</i><span>Amity</span><i>•</i><span>IP University</span><i>•</i>
+      <span>Verified students only</span><i>•</i><span>DU</span><i>•</i><span>DTU</span><i>•</i><span>IIT Delhi</span><i>•</i><span>Jamia Millia</span><i>•</i><span>Amity</span><i>•</i><span>IP University</span><i>•</i>
+      <span>Verified students only</span><i>•</i><span>DU</span><i>•</i><span>DTU</span><i>•</i><span>IIT Delhi</span><i>•</i><span>Jamia Millia</span><i>•</i><span>Amity</span><i>•</i><span>IP University</span><i>•</i>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <header class="nav" id="nav">
+    <div class="wrap nav-in">
+      <a class="logo" href="#home" aria-label="UniHaat home">
+        <span class="logo-mark" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="7" fill="#161210"/><path d="M7 13.5 13 8l6 5.5" stroke="#FFB81C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 13v5h8v-5" stroke="#FFF9F0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="logo-word">Uni<em>Haat</em></span>
+        <span class="logo-tag">Your Campus.<br/>Your Marketplace.</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#marketplace">Marketplace</a>
+        <a href="#demand">Demand Board</a>
+        <a href="#clearance">Hostel Clearance</a>
+        <a href="#smartprice">SmartPrice</a>
+        <a href="#safeswap">SafeSwap</a>
+        <a href="#impact">UniImpact</a>
+      </nav>
+      <div class="nav-actions">
+        <button class="icon-btn" id="wishlistBtn" aria-label="Wishlist">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+          <span class="count" id="wishlistCount">0</span>
+        </button>
+        <button class="btn btn-ghost" id="verifyBtn">Verify student</button>
+        <button class="btn btn-primary" id="sellBtn"><span class="sell-full">+ Sell an item</span><span class="sell-short">+ Sell</span></button>
+        <button class="avatar" id="avatarBtn" aria-label="Your profile">A</button>
+        <button class="hamburger" id="menuBtn" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+      </div>
+    </div>
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#impact">UniImpact</a>
+      <div class="mobile-actions">
+        <button class="btn btn-ghost" id="mVerifyBtn" type="button">Verify student</button>
+        <button class="btn btn-primary" id="mSellBtn" type="button">+ Sell an item</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="home">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy reveal">
+          <p class="eyebrow"><span class="dot"></span> 12,480 verified students · Delhi cluster</p>
+          <h1>Your Campus.<br/><span class="accent">Your Marketplace.</span></h1>
+          <p class="lede">Buy, sell, rent, exchange and give away student essentials — with verified students from your college and nearby colleges. Fair prices, nearby pickup, secure handover.</p>
+          <form class="hero-search" id="heroSearch" role="search">
+            <label class="sr-only" for="heroQ">Search for a calculator, cycle, mattress…</label>
+            <input id="heroQ" type="search" placeholder="Search for a calculator, cycle, mattress…" autocomplete="off" />
+            <button class="btn btn-primary" type="submit">Search</button>
+          </form>
+          <div class="hero-quick" aria-label="Popular searches">
+            <span>Popular:</span>
+            <button data-q="calculator">Calculator</button>
+            <button data-q="cycle">Cycle</button>
+            <button data-q="mattress">Mattress</button>
+            <button data-q="iPhone">iPhone</button>
+            <button data-q="books">Books</button>
+          </div>
+          <dl class="hero-stats">
+            <div><dt><strong data-count="12480">0</strong></dt><dd>Verified students</dd></div>
+            <div><dt><strong data-count="48210">0</strong></dt><dd>Items reused</dd></div>
+            <div><dt><strong data-count="16.9" data-decimals="1" data-prefix="₹" data-suffix=" Cr+">₹0</strong></dt><dd>Student savings</dd></div>
+          </dl>
+        </div>
+        <div class="hero-visual reveal" aria-hidden="true">
+          <div class="hero-card hero-card-main">
+            <img src="./assets/table-chair.svg" alt="" loading="eager" />
+            <div class="hero-card-body">
+              <div class="row-between"><strong>Study Table + Chair</strong><span class="price">₹2,499</span></div>
+              <p>DTU · 0.4 km · Like new</p>
+              <span class="verdict verdict-good">Good deal · SmartPrice ₹2,600</span>
+            </div>
+          </div>
+          <div class="hero-card hero-card-sm hero-card-a">
+            <img src="./assets/iphone.svg" alt="" loading="lazy" />
+            <div><strong>iPhone 12</strong><span>₹14,999 · IIT Delhi</span></div>
+          </div>
+          <div class="hero-card hero-card-sm hero-card-b">
+            <img src="./assets/cycle.svg" alt="" loading="lazy" />
+            <div><strong>Hero Cycle</strong><span>₹3,200 · 0.8 km</span></div>
+          </div>
+          <div class="hero-badge">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            SafeSwap QR ready
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CATEGORIES -->
+    <section class="cats wrap reveal" aria-label="Categories">
+      <div class="cats-head"><h2>Browse by category</h2><a href="#marketplace">View all →</a></div>
+      <div class="cats-row" id="catsRow"></div>
+    </section>
+
+    <!-- MARKETPLACE -->
+    <section class="section wrap" id="marketplace">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">Nearby Marketplace</p>
+          <h2>Fresh listings near you</h2>
+          <p class="sub">Same college, same university and nearby colleges — sorted by distance. Every listing shows a SmartPrice verdict.</p>
+        </div>
+        <div class="scope" role="group" aria-label="College scope">
+          <button class="scope-btn active" data-scope="all">All nearby</button>
+          <button class="scope-btn" data-scope="same">Same college</button>
+          <button class="scope-btn" data-scope="uni">Same university</button>
+          <button class="scope-btn" data-scope="nearby">Nearby colleges</button>
+        </div>
+      </div>
+
+      <div class="toolbar reveal">
+        <label class="search-box">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="searchInput" type="search" placeholder="Search listings…" aria-label="Search listings" />
+        </label>
+        <div class="pills" id="typePills" role="group" aria-label="Listing type">
+          <button class="pill active" data-type="all">All</button>
+          <button class="pill" data-type="sell">Buy</button>
+          <button class="pill" data-type="rent">Rent</button>
+          <button class="pill" data-type="exchange">Exchange</button>
+          <button class="pill" data-type="free">Free</button>
+        </div>
+        <label class="select-wrap">
+          <span class="sr-only">Sort by</span>
+          <select id="sortSelect" aria-label="Sort by">
+            <option value="distance">Nearest first</option>
+            <option value="price-asc">Price: low to high</option>
+            <option value="price-desc">Price: high to low</option>
+            <option value="newest">Newest</option>
+            <option value="deal">Best deal</option>
+          </select>
+        </label>
+        <label class="select-wrap">
+          <span class="sr-only">Category</span>
+          <select id="catSelect" aria-label="Category"><option value="all">All categories</option></select>
+        </label>
+      </div>
+
+      <p class="results-meta" id="resultsMeta" aria-live="polite"></p>
+      <div class="grid" id="productGrid"></div>
+      <div class="empty" id="emptyState" hidden>
+        <h3>No listings match that search</h3>
+        <p>Try a different keyword — or post a demand and let UniMatch find it for you.</p>
+        <a class="btn btn-primary" href="#demand">Post a demand</a>
+      </div>
+    </section>
+
+    <!-- DEMAND BOARD -->
+    <section class="section band" id="demand">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <p class="eyebrow">Student Demand Board · UniMatch</p>
+            <h2>Looking for something?<br/>Post it. We’ll match it.</h2>
+            <p class="sub">UniMatch automatically matches your demand with available listings by category, keywords, budget and location — and notifies you when a match appears.</p>
+          </div>
+        </div>
+        <div class="demand-grid">
+          <form class="panel reveal" id="demandForm">
+            <h3>Post a demand</h3>
+            <label>What do you need?<input name="title" required placeholder="e.g. Scientific calculator fx-991" /></label>
+            <div class="two">
+              <label>Category<select name="category" id="demandCat" required></select></label>
+              <label>Budget max (₹)<input name="budget" type="number" min="0" placeholder="800" required /></label>
+            </div>
+            <label>Needed by<input name="neededBy" type="date" /></label>
+            <label>Notes<textarea name="notes" rows="2" placeholder="Hostel pickup preferred, urgent for exams…"></textarea></label>
+            <button class="btn btn-primary btn-block" type="submit">Post demand → get UniMatch</button>
+            <p class="fine">Free for verified students. Auto-closes in 30 days.</p>
+          </form>
+          <div class="reveal">
+            <div class="demands" id="demandsList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOSTEL CLEARANCE -->
+    <section class="section wrap" id="clearance">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">Hostel Clearance</p>
+          <h2>Moving out? Clear it all, in one pickup.</h2>
+          <p class="sub">Bundles from students relocating — furniture, appliances, mattresses and essentials. One seller, one pickup, one SafeSwap.</p>
+        </div>
+        <a class="btn btn-ghost" href="#marketplace" data-filter-clearance>Browse clearance →</a>
+      </div>
+      <div class="clearance-row" id="clearanceRow"></div>
+    </section>
+
+    <!-- SMARTPRICE -->
+    <section class="section band-dark" id="smartprice">
+      <div class="wrap">
+        <div class="section-head reveal light">
+          <div>
+            <p class="eyebrow light">SmartPrice · AI-Based Price Recommendation</p>
+            <h2>Price it right.<br/>Not too high, not too low.</h2>
+            <p class="sub light">SmartPrice compares similar UniHaat listings by category, original price, age and condition — so sellers price competitively and buyers spot fair deals.</p>
+          </div>
+        </div>
+        <div class="smart-grid">
+          <form class="panel dark reveal" id="smartForm">
+            <h3>Try SmartPrice</h3>
+            <label>Category<select id="spCat"></select></label>
+            <label>Original price (₹)<input id="spOriginal" type="number" value="12000" min="100" /></label>
+            <label>Age (months)<input id="spAge" type="range" min="0" max="48" value="14" /><output id="spAgeOut">14 months</output></label>
+            <fieldset>
+              <legend>Condition</legend>
+              <div class="seg" id="spCond">
+                <button type="button" data-cond="Like new">Like new</button>
+                <button type="button" data-cond="Good" class="active">Good</button>
+                <button type="button" data-cond="Fair">Fair</button>
+              </div>
+            </fieldset>
+            <label class="check"><input type="checkbox" id="spAccessories" checked /> All accessories included</label>
+          </form>
+          <div class="panel dark reveal smart-result" aria-live="polite">
+            <p class="eyebrow light">Recommended resale price</p>
+            <p class="smart-price" id="spPrice">₹5,880</p>
+            <p class="smart-range" id="spRange">Fair range ₹5,100 – ₹6,600</p>
+            <div class="bars" id="spBars" aria-hidden="true"></div>
+            <ul class="smart-points" id="spPoints"></ul>
+            <p class="fine light" id="spNote">v1 rule-based model; v2 learns from UniHaat comps.</p>
+            <button class="btn btn-primary" id="spUseBtn" type="button">Use this price in Sell →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SAFESWAP -->
+    <section class="section wrap" id="safeswap">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">SafeSwap · Secure Campus Handover</p>
+          <h2>Meet. Scan. Done.</h2>
+          <p class="sub">When buyer and seller agree, SafeSwap generates a unique QR. Both scan and confirm the physical handover — the transaction is recorded and marked complete.</p>
+        </div>
+      </div>
+      <div class="swap-grid">
+        <div class="panel reveal swap-demo">
+          <h3>Live SafeSwap demo</h3>
+          <p class="sub">Item: <strong>Study Table + Chair</strong> · ₹2,499 · DTU Gate pickup</p>
+          <div class="swap-qr-wrap">
+            <canvas id="qrCanvas" width="180" height="180" aria-label="SafeSwap QR code"></canvas>
+            <div>
+              <p class="mono" id="swapCode">UH-8F3K-29QX</p>
+              <p class="fine">Transaction ID · expires in 2 hours</p>
+              <div class="swap-steps" id="swapSteps">
+                <span class="step active">1 · Agreed</span>
+                <span class="step">2 · Handover</span>
+                <span class="step">3 · Completed</span>
+              </div>
+            </div>
+          </div>
+          <div class="row-gap">
+            <button class="btn btn-primary" id="swapScanBtn">Simulate scan &amp; confirm</button>
+            <button class="btn btn-ghost" id="swapNewBtn">New code</button>
+          </div>
+          <p class="fine" id="swapStatus">Waiting for both parties to confirm handover at a public campus spot.</p>
+        </div>
+        <div class="reveal swap-points">
+          <article><strong>01 — Agree in chat</strong><p>Price, pickup spot and time are locked in the thread. No advance payment needed.</p></article>
+          <article><strong>02 — Scan at pickup</strong><p>Buyer and seller scan the QR / enter the code. Both confirm the item matches its Product Passport.</p></article>
+          <article><strong>03 — Recorded</strong><p>Transaction is marked complete, ratings unlock, and UniImpact logs the reuse.</p></article>
+          <div class="tip"><strong>Safe pickup tip:</strong> Meet at a busy campus spot in daylight — gate, library, hostel mess. UniHaat suggests the spot for every deal.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- UNIIMPACT -->
+    <section class="section band" id="impact">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div>
+            <p class="eyebrow">UniImpact · Savings &amp; Sustainability Tracker</p>
+            <h2>Every reuse counts.</h2>
+            <p class="sub">UniHaat tracks products reused, exchanged and given away — and the money students save by buying pre-owned instead of new.</p>
+          </div>
+        </div>
+        <div class="impact-grid reveal">
+          <div class="impact-card"><strong data-count="48210">0</strong><span>Items reused</span><div class="bar"><i style="--w:82%"></i></div></div>
+          <div class="impact-card"><strong data-count="16.9" data-decimals="1" data-prefix="₹" data-suffix=" Cr">₹0</strong><span>Saved vs new prices</span><div class="bar"><i style="--w:64%"></i></div></div>
+          <div class="impact-card"><strong data-count="1840">0</strong><span>Free giveaways</span><div class="bar"><i style="--w:41%"></i></div></div>
+          <div class="impact-card"><strong data-count="385" data-suffix=" t">0 t</strong><span>Waste diverted (est.)</span><div class="bar"><i style="--w:58%"></i></div></div>
+        </div>
+        <div class="panel reveal impact-note">
+          <h3>Your impact this semester</h3>
+          <p>You bought <strong>3 items pre-owned</strong> and saved an estimated <strong>₹4,250</strong> vs new prices. You gave away <strong>2 items</strong> during hostel clearance. That’s <strong>~11 kg</strong> of waste diverted — enough to fill a hostel room corner.</p>
+          <div class="row-gap"><button class="btn btn-primary" id="impactShare">Share my UniImpact card</button><a class="btn btn-ghost" href="#marketplace">Keep reusing →</a></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-grid">
+      <div>
+        <p class="logo-word big">Uni<em>Haat</em></p>
+        <p>Your Campus. Your Marketplace.<br/>Verified, hyperlocal, student-to-student.</p>
+      </div>
+      <nav aria-label="Footer"><a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#impact">UniImpact</a></nav>
+      <div>
+        <p><strong>Trust &amp; safety</strong></p>
+        <p>Verified students only · Report &amp; block · Safe public pickup · No advance payment</p>
+        <p class="fine">© 2026 UniHaat · Made for students, by students. Delhi cluster pilot.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- PRODUCT MODAL -->
+  <div class="overlay" id="productOverlay" hidden>
+    <div class="modal modal-product" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- SELL MODAL -->
+  <div class="overlay" id="sellOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="sellTitle">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2 id="sellTitle">Sell an item</h2>
+      <p class="sub">SmartPrice will recommend a fair price as you type.</p>
+      <form id="sellForm">
+        <label>Title<input name="title" required placeholder="e.g. Casio fx-991ES Plus calculator" /></label>
+        <div class="two">
+          <label>Category<select name="category" id="sellCat"></select></label>
+          <label>Your price (₹)<input name="price" type="number" min="0" required placeholder="650" /></label>
+        </div>
+        <div class="two">
+          <label>Original price (₹)<input name="original" type="number" min="0" placeholder="1100" /></label>
+          <label>Age (months)<input name="age" type="number" min="0" placeholder="6" /></label>
+        </div>
+        <div class="two">
+          <label>Condition<select name="condition"><option>Like new</option><option selected>Good</option><option>Fair</option></select></label>
+          <label>Listing type<select name="type"><option value="sell">Sell</option><option value="rent">Rent</option><option value="exchange">Exchange</option><option value="free">Free giveaway</option></select></label>
+        </div>
+        <label>Description<textarea name="description" rows="3" placeholder="Condition, accessories, pickup spot…"></textarea></label>
+        <div class="smart-hint" id="sellSmartHint">SmartPrice: enter original price + age for a recommendation.</div>
+        <button class="btn btn-primary btn-block" type="submit">Publish listing</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- VERIFY MODAL -->
+  <div class="overlay" id="verifyOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="verifyTitle">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <h2 id="verifyTitle">Verify as a student</h2>
+      <p class="sub">Verified students can sell, post demands and use SafeSwap. Browsing is open to all.</p>
+      <form id="verifyForm">
+        <label>College email<input name="email" type="email" required placeholder="you@dtce.ac.in" /></label>
+        <label>College / University<select name="college" required>
+          <option value="">Select your college</option><option>Delhi Technological University (DTU)</option><option>University of Delhi (DU)</option><option>IIT Delhi</option><option>Jamia Millia Islamia</option><option>Amity University</option><option>IP University</option>
+        </select></label>
+        <label>Student ID (optional)<input name="studentId" placeholder="DTU/2K23/… " /></label>
+        <button class="btn btn-primary btn-block" type="submit">Send verification OTP</button>
+        <p class="fine">Demo: any college email verifies instantly in this prototype.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- CHAT DRAWER -->
+  <aside class="drawer" id="chatDrawer" aria-label="Chat" hidden>
+    <div class="drawer-head">
+      <div><strong id="chatTitle">Chat</strong><p class="fine" id="chatSub">Seller · responds in ~1 hr</p></div>
+      <button class="modal-close" id="chatClose" aria-label="Close chat">×</button>
+    </div>
+    <div class="chat-body" id="chatBody"></div>
+    <form class="chat-form" id="chatForm">
+      <input id="chatInput" placeholder="Message… try: Can you do ₹2,200?" aria-label="Message" />
+      <button class="btn btn-primary" type="submit">Send</button>
+    </form>
+    <div class="chat-quick">
+      <button data-msg="Is this available?">Is this available?</button>
+      <button data-msg="Can you do a lower price?">Negotiate</button>
+      <button data-msg="Can we meet at the gate at 5 pm?">Pickup spot</button>
+    </div>
+  </aside>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
