@@ -541,10 +541,15 @@ initAuthUI({
         updateWishlistCount();
       }
       if (liveListings?.length) {
-        // Live rows replace their local twin (same title + seller), then join
+        // Live rows replace their local twin, then join. The title is the
+        // only part of a listing the two datasets can be matched on: the
+        // offline catalogue abbreviates the seller's name ("Aarav S.") while
+        // the database stores it in full ("Aarav Sharma").
+        const sameTitle = (a, b) =>
+          String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
         const merged = [...liveListings];
         products.forEach((local) => {
-          const dupe = liveListings.find((l) => l.title === local.title && l.seller === local.seller);
+          const dupe = liveListings.find((l) => sameTitle(l.title, local.title));
           if (!dupe) merged.push(local);
         });
         products = merged;
