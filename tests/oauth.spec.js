@@ -188,35 +188,44 @@ test("Google sign-in lands signed in and syncs the dataset exactly once", async 
   expect(count("/rest/v1/demands")).toBe(1);
 });
 
-test("a Google student without a college is asked to pick one", async ({ page }) => {
+test("a Google student's campus comes from their address", async ({ page }) => {
   await mockGoogle(page);
   await startGoogleSignIn(page);
   await page.waitForTimeout(3000);
 
-  // Google sign-up has no college step, so the profile starts without one.
-  await expect(page.locator("#collegeOverlay")).toBeVisible();
-  await expect(page.locator("#menuCollege")).toHaveText("No college set yet");
-  // The picker is populated from the database.
-  await expect(page.locator("#collegePick option")).toHaveCount(3);
+  // The address decides the campus. A Google account on a college domain
+  // lands on that campus — there is no picker to answer, because there is
+  // no question: the server already knows.
+  await expect(page.locator("#collegeOverlay")).toBeHidden();
+  await expect(page.locator("#menuCollege")).toHaveText("DTU · Signed in");
 
-  // The profile menu offers it too — check it where the student sees it.
-  await page.click("#collegeOverlay .modal-close");
+  // The profile menu says the same thing where the student sees it.
   await page.click("#avatarBtn");
   await expect(page.locator("#menuCollegeBtn")).toBeVisible();
-  await expect(page.locator("#menuCollegeBtn")).toHaveText("Choose your college");
+  await expect(page.locator("#menuCollegeBtn")).toHaveText("Campus: DTU");
 });
 
-test("choosing a college saves it to the profile", async ({ page }) => {
+test("the campus cannot be set by hand", async ({ page }) => {
   const calls = await mockGoogle(page);
   await startGoogleSignIn(page);
   await page.waitForTimeout(3000);
 
-  await page.selectOption("#collegePick", COLLEGE_ID);
+  await page.click("#avatarBtn");
+  await page.click("#menuCollegeBtn");
+  await expect(page.locator("#collegeOverlay")).toBeVisible();
+
+  // The picker is populated from the database and shows the campus the
+  // address resolves to — and it is not editable.
+  await expect(page.locator("#collegePick option")).toHaveCount(3);
+  await expect(page.locator("#collegePick")).toHaveValue("DTU");
+  await expect(page.locator("#collegePick")).toBeDisabled();
+
   await page.click("#collegeForm button[type=submit]");
   await page.waitForTimeout(1200);
 
+  // And the app never tries to write a campus to the profile.
   const write = calls.rest.find((r) => r.method === "PATCH" && r.path.startsWith("/rest/v1/profiles"));
-  expect(write, "the college is written to the profile").toBeTruthy();
+  expect(write, "the campus is not written by the client").toBeFalsy();
   await expect(page.locator("#collegeOverlay")).toBeHidden();
 });
 

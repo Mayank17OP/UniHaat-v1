@@ -1,13 +1,19 @@
 // UniHaat seed data — realistic Delhi campus listings
+// The colleges UniHaat serves, and the mail domain each one issues student
+// addresses on.
+//
+// The `domain` is the offline copy of `colleges.email_domain` in the
+// database — the same list the server enforces when it opens an account.
+// Keep the two in step: `tests/college-email.spec.js` fails if they drift.
 export const COLLEGES = [
-  { short: "DTU", label: "Delhi Technological University" },
-  { short: "DU", label: "University of Delhi" },
-  { short: "Hansraj", label: "Hansraj College, DU" },
-  { short: "IIT Delhi", label: "IIT Delhi" },
-  { short: "Jamia", label: "Jamia Millia Islamia" },
-  { short: "Amity", label: "Amity University" },
-  { short: "IPU", label: "Indraprastha University" },
-  { short: "NSUT", label: "Netaji Subhas University of Technology" },
+  { short: "DTU", label: "Delhi Technological University", domain: "dtu.ac.in" },
+  { short: "DU", label: "University of Delhi", domain: "du.ac.in" },
+  { short: "Hansraj", label: "Hansraj College, DU", domain: "hansrajcollege.ac.in" },
+  { short: "IIT Delhi", label: "IIT Delhi", domain: "iitd.ac.in" },
+  { short: "Jamia", label: "Jamia Millia Islamia", domain: "jmi.ac.in" },
+  { short: "Amity", label: "Amity University", domain: "amity.edu" },
+  { short: "IPU", label: "Indraprastha University", domain: "ipu.ac.in" },
+  { short: "NSUT", label: "Netaji Subhas University of Technology", domain: "nsut.ac.in" },
 ];
 
 export const CATEGORIES = [

@@ -328,6 +328,213 @@ begin
   end;
 end $$;
 
+-- ---------------------------------------------------------------------------
+-- 6. Only a college address can open an account.
+--
+--    The trigger on `auth.users` is the admission ticket, so it has to be
+--    there and it has to hold on both sides of the row's life. Everything
+--    below writes through `auth.users` directly, which is exactly what
+--    GoTrue does when it creates a user — by password, by Google, or from
+--    the admin API.
+-- ---------------------------------------------------------------------------
+
+do $$
+declare
+  v_trigger text;
+begin
+  select string_agg(tgname, ', ' order by tgname) into v_trigger
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'auth' and c.relname = 'users'
+     and not t.tgisinternal;
+
+  if v_trigger is null then
+    raise exception 'auth.users has no admission trigger';
+  end if;
+
+  if v_trigger not like '%college%' and v_trigger not like '%email%' then
+    raise exception 'the admission trigger is not about the address: %', v_trigger;
+  end if;
+end $$;
+
+-- A personal address is refused.
+do $$
+begin
+  begin
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                            email_confirmed_at, created_at, updated_at, raw_app_meta_data,
+                            raw_user_meta_data)
+    values ('00000000-0000-0000-0000-000000000000',
+            gen_random_uuid(), 'authenticated', 'authenticated',
+            'student@gmail.com', crypt('campus-life-1', gen_salt('bf')),
+            now(), now(), now(),
+            '{"provider":"email","providers":["email"]}'::jsonb,
+            '{}'::jsonb);
+    raise exception 'a Gmail account was accepted';
+  exception
+    when others then
+      if sqlerrm like 'a Gmail account was accepted%' then
+        raise;
+      end if;
+  end;
+end $$;
+
+-- So is a lookalike domain on a real college's name.
+do $$
+begin
+  begin
+    insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                            email_confirmed_at, created_at, updated_at, raw_app_meta_data,
+                            raw_user_meta_data)
+    values ('00000000-0000-0000-0000-000000000000',
+            gen_random_uuid(), 'authenticated', 'authenticated',
+            'student@notdtu.ac.in', crypt('campus-life-1', gen_salt('bf')),
+            now(), now(), now(),
+            '{"provider":"email","providers":["email"]}'::jsonb,
+            '{}'::jsonb);
+    raise exception 'a lookalike domain was accepted';
+  exception
+    when others then
+      if sqlerrm like 'a lookalike domain was accepted%' then
+        raise;
+      end if;
+  end;
+end $$;
+
+-- A college address is accepted.
+do $$
+begin
+  insert into auth.users (instance_id, id, aud, role, email, encrypted_password,
+                          email_confirmed_at, created_at, updated_at, raw_app_meta_data,
+                          raw_user_meta_data)
+  values ('00000000-0000-0000-0000-000000000000',
+          gen_random_uuid(), 'authenticated', 'authenticated',
+          'regression.student@dtu.ac.in', crypt('campus-life-1', gen_salt('bf')),
+          now(), now(), now(),
+          '{"provider":"email","providers":["email"]}'::jsonb,
+          '{}'::jsonb);
+end $$;
+
+-- And a campus sub-domain belongs to the same college as its parent.
+do $$
+declare
+  v_college uuid;
+begin
+  select c.id into v_college
+    from public.colleges c
+   where public.college_for_domain('gn.amity.edu') = c.id;
+
+  if v_college is null then
+    raise exception 'a campus sub-domain does not resolve to a college';
+  end if;
+
+  -- The domain has to resolve to exactly one college, or the account would
+  -- have no single campus to belong to.
+  if (select count(*) from public.colleges c
+        where public.college_for_domain('gn.amity.edu') = c.id) <> 1 then
+    raise exception 'a campus sub-domain resolves to more than one college';
+  end if;
+end $$;
+
+-- Changing the address to a personal one is refused too.
+do $$
+declare
+  v_user uuid;
+begin
+  select id into v_user from auth.users where email = 'regression.student@dtu.ac.in';
+
+  begin
+    update auth.users set email = 'student@protonmail.com' where id = v_user;
+    raise exception 'a college account was moved onto a personal address';
+  exception
+    when others then
+      if sqlerrm like 'a college account was moved onto a personal address%' then
+        raise;
+      end if;
+  end;
+
+  -- The address is still the college one.
+  if (select email from auth.users where id = v_user) <> 'regression.student@dtu.ac.in' then
+    raise exception 'the college address did not survive the refused update';
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
+-- 7. The student id, the campus and the verification are the server's to
+--    give.
+-- ---------------------------------------------------------------------------
+
+do $$
+begin
+  if has_column_privilege('authenticated', 'public.profiles', 'student_id', 'UPDATE')
+     or has_column_privilege('authenticated', 'public.profiles', 'verified', 'UPDATE')
+     or has_column_privilege('authenticated', 'public.profiles', 'college_id', 'UPDATE') then
+    raise exception 'a client can still write the student id, the campus or the verified flag';
+  end if;
+end $$;
+
+-- And the write is refused when it is tried.
+select set_config('request.jwt.claim.sub', :'buyer', true);
+select set_config('request.jwt.claims', '{"sub":"' || :'buyer' || '","role":"authenticated"}', true);
+set local role authenticated;
+
+do $$
+declare
+  v_target uuid := current_setting('uni.regression.buyer')::uuid;
+  v_college uuid;
+begin
+  select id into v_college from public.colleges order by short_name limit 1;
+
+  begin
+    update public.profiles set college_id = v_college where id = v_target;
+    raise exception 'a client was allowed to move itself onto another campus';
+  exception
+    when others then
+      if sqlerrm like 'a client was allowed%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    update public.profiles set verified = true where id = v_target;
+    raise exception 'a client was allowed to mark itself verified';
+  exception
+    when others then
+      if sqlerrm like 'a client was allowed%' then
+        raise;
+      end if;
+  end;
+end $$;
+
+-- The verification asks for evidence: a college address and a roll number.
+-- Without the roll number the student stays unverified.
+do $$
+declare
+  v_target uuid := current_setting('uni.regression.buyer')::uuid;
+  v_email  text;
+  v_row    public.profiles;
+begin
+  select u.email into v_email from auth.users u where u.id = v_target;
+  v_email := lower(coalesce(v_email, ''));
+
+  if split_part(v_email, '@', 2) not in ('gmail.com', 'yahoo.com', 'outlook.com') then
+    -- A college address with no roll number is not enough.
+    update public.profiles set verified = false, student_id = null where id = v_target;
+
+    v_row := public.claim_student_verification(null, null);
+    if v_row.verified then
+      raise exception 'a student was verified without any evidence';
+    end if;
+
+    -- With one, it is.
+    v_row := public.claim_student_verification(null, 'REGRESSION/1/2023');
+    if not v_row.verified then
+      raise exception 'a student with a college address and a roll number was not verified';
+    end if;
+  end if;
+end $$;
+
 reset role;
 
 rollback;

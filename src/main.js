@@ -1,6 +1,7 @@
 import { PRODUCTS, DEMANDS, CATEGORIES, CLEARANCE, COLLEGES } from "./data.js";
 import * as SB from "./supabase.js";
 import { initAuthUI, getProfileData, refreshProfile, renderAuthState } from "./auth.js";
+import { collegeForEmail } from "./college-email.js";
 import {
   syncWishlist, syncListings, syncDemands,
   publishListing, publishDemand, persistWishlist,
@@ -41,6 +42,17 @@ function verdict(product) {
   if (ratio <= 0.92) return { label: `Good deal · SmartPrice ${fmt(sp.rec)}`, cls: "verdict-good", sp };
   if (ratio <= 1.08) return { label: `Fair price · SmartPrice ${fmt(sp.rec)}`, cls: "verdict-fair", sp };
   return { label: `Above SmartPrice ${fmt(sp.rec)}`, cls: "verdict-high", sp };
+}
+
+/**
+ * How a seller's reputation is written on a card.
+ *
+ * A seller with no reviews has no star rating. Printing "★ 5" for them
+ * would claim a perfect score that nobody gave — so the card says they are
+ * a new seller instead, and only a real review earns a star.
+ */
+function sellerRating(p) {
+  return typeof p.rating === "number" ? `★ ${p.rating}` : "· New seller";
 }
 
 /* ---------- Toast (Emil spring) ---------- */
@@ -154,7 +166,7 @@ function renderGrid() {
         <h3>${p.title}</h3>
         <div class="card-meta"><span>${p.college}</span><span>· ${p.distance} km</span><span>· ${p.condition}</span><span class="verified">✓ Verified</span></div>
         <span class="verdict ${v.cls}">${v.label}</span>
-        <div class="card-foot"><span class="price">${priceLabel(p)}</span><span class="fine">${p.seller} ★ ${p.rating}</span></div>
+        <div class="card-foot"><span class="price">${priceLabel(p)}</span><span class="fine">${p.seller} ${sellerRating(p)}</span></div>
       </div>
     </article>`;
   }).join("");
@@ -261,7 +273,7 @@ function openProduct(id) {
       </div>
       <div class="seller">
         <span class="avatar">${p.seller[0]}</span>
-        <div><strong>${p.seller}</strong><p class="fine" style="margin:0">✓ Verified student · ★ ${p.rating} · ${p.deals} completed deals</p></div>
+        <div><strong>${p.seller}</strong><p class="fine" style="margin:0">✓ Verified student · ${sellerRating(p)} · ${p.deals} completed deals</p></div>
       </div>
       <div class="qr-mini">
         <canvas width="72" height="72" id="modalQr"></canvas>
@@ -444,7 +456,7 @@ $("#sellForm").addEventListener("submit", (e) => {
     id: "p" + Date.now(), title: f.title.value, price: +f.price.value || 0, original: +f.original.value || +f.price.value,
     type: f.type.value, category: f.category.value, condition: f.condition.value, ageMonths: +f.age.value || 6,
     distance: 0.2, college: profile?.colleges?.short_name || "DTU", scope: "same",
-    seller: profile?.full_name || "You", rating: 5.0, deals: 0,
+    seller: profile?.full_name || "You", rating: null, deals: 0,
     img: "./assets/kettle.svg",
     desc: f.description.value || "Listed via UniHaat Sell.", accessories: "As described", repairs: "None", battery: null, clearance: false, created: 0,
   };
@@ -468,27 +480,64 @@ $("#sellForm").addEventListener("submit", (e) => {
 });
 
 /* ---------- Verify ---------- */
-$("#verifyBtn").addEventListener("click", () => openOverlay("#verifyOverlay"));
+$("#verifyBtn").addEventListener("click", () => {
+  // The address on the account is what the server checks, so show it
+  // rather than asking the student to type it a second time.
+  const form = $("#verifyForm");
+  const account = SB.getUser()?.email || "";
+  if (form.email && account) form.email.value = account;
+  // The campus comes off the address; the profile already carries it, but
+  // the address is the authority when the two disagree.
+  const college =
+    getProfileData()?.colleges?.short_name || collegeForEmail(account)?.short || "";
+  if (form.college && college) form.college.value = college;
+  openOverlay("#verifyOverlay");
+});
 $("#verifyForm").addEventListener("submit", async (e) => {
-  e.preventDefault(); verified = true; localStorage.setItem("uh-verified", "1");
-  $("#verifyBtn").textContent = "✓ Verified"; closeOverlays(); toast("Student verified — you can now sell & use SafeSwap");
-  // Persist the verified flag against the student's profile.
-  // `verified` is server-owned, so this goes through the RPC — a student
-  // must not be able to write that column directly.
-  if (signedIn) {
-    try {
-      const form = e.target;
-      await SB.claimVerification({
-        college: form.college.value || null,
-        studentId: form.studentId.value || null,
-      });
-      // Re-read the profile so the menu stops offering "Verify as a student".
-      await refreshProfile({ force: true });
-      renderAuthState();
-      toast("Verification saved to your profile");
-    } catch (err) {
-      console.warn("[UniHaat] could not save verification", err?.message);
+  e.preventDefault();
+  const form = e.target;
+  if (!signedIn) {
+    // There is no account to ask. The local flag unlocks the prototype's
+    // own UI; the server keeps its own copy, and the account decides that
+    // part for real.
+    verified = true;
+    localStorage.setItem("uh-verified", "1");
+    $("#verifyBtn").textContent = "✓ Verified";
+    closeOverlays();
+    toast("Student verified — sign in with your college email to keep it.");
+    return;
+  }
+  try {
+    // `verified` is server-owned. The server checks the address on the
+    // account against the college list and answers; the button follows the
+    // answer rather than declaring success and hoping.
+    const result = await SB.claimVerification({
+      college: form.college.value || null,
+      studentId: form.studentId.value || null,
+    });
+    if (!result?.verified) {
+      // The server said no. The two things it asks for are a college
+      // address and a roll number, so the message names the one that is
+      // missing rather than guessing.
+      closeOverlays();
+      toast(
+        form.studentId.value.trim()
+          ? "We couldn't verify that — check the college and the student ID."
+          : "Add your student ID — the college address and the roll number are the evidence."
+      );
+      return;
     }
+    verified = true;
+    localStorage.setItem("uh-verified", "1");
+    $("#verifyBtn").textContent = "✓ Verified";
+    closeOverlays();
+    toast("Student verified — you can now sell & use SafeSwap");
+    // Re-read the profile so the menu stops offering "Verify as a student".
+    await refreshProfile({ force: true });
+    renderAuthState();
+  } catch (err) {
+    console.warn("[UniHaat] could not save verification", err?.message);
+    toast("Could not save your verification. Try again.");
   }
 });
 if (verified) $("#verifyBtn").textContent = "✓ Verified";

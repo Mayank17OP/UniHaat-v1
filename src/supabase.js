@@ -5,6 +5,7 @@
 // the prototype always renders. `mode` tells the UI which path it is on.
 
 import { CONFIG, isSupabaseConfigured } from "./config.js";
+import { isCollegeEmail, collegeEmailRequiredMessage, setCollegeDomains } from "./college-email.js";
 
 const listeners = new Set();
 let client = null;
@@ -91,9 +92,22 @@ function withTimeout(promise, ms, message) {
   ]);
 }
 
+/**
+ * The colleges whose addresses may open an account.
+ *
+ * The database is the list the server enforces, so it is the list the
+ * browser checks against too. The check happens here rather than in the
+ * form because a student should not have to fill in a form only to be
+ * told the address is wrong.
+ */
+function assertCollegeEmail(email) {
+  if (!isCollegeEmail(email)) throw new Error(collegeEmailRequiredMessage(email));
+}
+
 export async function signUp({ email, password, fullName, college }) {
   const supa = getClient();
   if (!supa) throw new Error("Supabase is not configured for this deployment.");
+  assertCollegeEmail(email);
   const { data, error } = await supa.auth.signUp({
     email,
     password,
@@ -116,6 +130,7 @@ export async function signUp({ email, password, fullName, college }) {
 export async function signIn({ email, password }) {
   const supa = getClient();
   if (!supa) throw new Error("Supabase is not configured for this deployment.");
+  assertCollegeEmail(email);
   const { data, error } = await supa.auth.signInWithPassword({ email, password });
   if (error) throw error;
   session = data.session;
@@ -207,15 +222,22 @@ export async function updateProfile(patch) {
   return data;
 }
 
-/** The college reference data — short name ↔ id, needed to set a college. */
+/**
+ * The college reference data — short name ↔ id, needed to set a college.
+ *
+ * `email_domain` comes along because it is the list of addresses the
+ * server will accept, and the sign-up form has to check against the same
+ * one.
+ */
 export async function fetchColleges() {
   const supa = getClient();
   if (!supa) return null;
   const { data, error } = await supa
     .from("colleges")
-    .select("id, short_name, name")
+    .select("id, short_name, name, email_domain")
     .order("name");
   if (error) throw error;
+  setCollegeDomains(data);
   return data ?? [];
 }
 
