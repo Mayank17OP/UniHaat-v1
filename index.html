@@ -8,6 +8,7 @@
   <link rel="preload" href="./assets/fonts/fraunces-900.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="./assets/fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="./src/style.css" />
+  <link rel="stylesheet" href="./src/unicompress.css" />
 </head>
 <body>
   <a class="skip" href="#marketplace">Skip to marketplace</a>
@@ -38,6 +39,7 @@
         <a href="#smartprice">SmartPrice</a>
         <a href="#safeswap">SafeSwap</a>
         <a href="#unireserve">UniReserve</a>
+        <a href="#unicompress">UniCompress</a>
         <a href="#impact">UniImpact</a>
       </nav>
       <div class="nav-actions">
@@ -59,7 +61,8 @@
       </div>
     </div>
     <div class="mobile-menu" id="mobileMenu">
-      <a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#unireserve">UniReserve</a><a href="#impact">UniImpact</a>
+      <a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#unireserve">UniReserve</a>
+        <a href="#unicompress">UniCompress</a><a href="#impact">UniImpact</a>
       <div class="mobile-actions">
         <button class="btn btn-ghost" id="mVerifyBtn" type="button">Verify student</button>
         <button class="btn btn-primary" id="mSellBtn" type="button">+ Sell an item</button>
@@ -423,6 +426,152 @@
       </div>
     </section>
 
+    <!-- UNICOMPRESS -->
+    <section class="section wrap" id="unicompress">
+      <div class="section-head reveal">
+        <div>
+          <p class="eyebrow">UniCompress · Huffman Coding for every photo</p>
+          <h2>Less Storage.<br/>Faster Uploads. Smarter Marketplace.</h2>
+          <p class="sub">Every photo a student uploads is compressed with Huffman coding before it is stored — the greedy algorithm from DAA, counting byte frequencies, building a binary tree, and writing the file out as variable-length codes. What the marketplace shows is the decompressed image, so a buyer sees exactly what the seller uploaded while the campus keeps fewer bytes.</p>
+        </div>
+      </div>
+
+      <div class="uc-layout">
+        <div class="reveal">
+          <div class="uc-drop" id="ucDrop" data-drag="no">
+            <p class="uc-drop-title">Drop a file here</p>
+            <p class="fine">A photo, a document, anything — it is compressed in your browser and never leaves your device unless you publish it.</p>
+            <label class="btn btn-primary" for="ucFile">Choose a file</label>
+            <input type="file" id="ucFile" hidden />
+            <p class="fine" id="ucStatus" data-state="idle">Nothing compressed yet.</p>
+          </div>
+
+          <div class="panel uc-dash">
+            <div class="row-between">
+              <h3>Compression dashboard</h3>
+              <span class="uc-verdict" id="ucVerdict" data-ok=""></span>
+            </div>
+            <div class="uc-stats">
+              <div><span>Original</span><strong id="ucOriginalSize">—</strong></div>
+              <div><span>After optimisation</span><strong id="ucOptimizedSize">—</strong></div>
+              <div><span>Compressed</span><strong id="ucCompressedSize">—</strong></div>
+              <div><span>Space saved</span><strong id="ucSaved">—</strong><em id="ucSavedPercent">—</em></div>
+              <div><span>Saved by Huffman alone</span><strong id="ucHuffmanSaving" data-grew="no">—</strong></div>
+              <div><span>Ratio</span><strong id="ucRatio" data-grew="no">—</strong></div>
+              <div><span>Encoding</span><strong id="ucEncodingMs">—</strong></div>
+              <div><span>Decoding</span><strong id="ucDecodingMs">—</strong></div>
+            </div>
+            <p class="fine uc-note" id="ucGrewNote" hidden></p>
+            <div class="uc-campus" id="ucCampus" hidden>
+              <h4>What the campus has saved</h4>
+              <div class="uc-stats uc-stats-campus">
+                <div><span>Files compressed</span><strong id="ucCampusFiles">—</strong></div>
+                <div><span>Bytes in</span><strong id="ucCampusOriginal">—</strong></div>
+                <div><span>Bytes kept</span><strong id="ucCampusStored">—</strong></div>
+                <div><span>Bytes saved</span><strong id="ucCampusSaved">—</strong><em id="ucCampusPercent">—</em></div>
+              </div>
+              <p class="fine">A count for everyone, not a list. The files behind it stay with the students who compressed them.</p>
+            </div>
+          </div>
+
+          <div class="panel uc-compare" id="ucCompare" hidden>
+            <h3>Before and after</h3>
+            <p class="fine">The original file, and the file rebuilt from the compressed blob. The two are compared byte for byte — the reconstruction is not a re-encode, it is the original bytes put back together.</p>
+            <div class="uc-images">
+              <figure>
+                <img id="ucOriginalImage" alt="The original file" />
+                <figcaption>Original</figcaption>
+              </figure>
+              <figure>
+                <img id="ucRestoredImage" alt="The file rebuilt from the compressed blob" />
+                <figcaption>Reconstructed</figcaption>
+              </figure>
+            </div>
+          </div>
+
+          <div class="panel uc-history">
+            <div class="row-between">
+              <h3>Your compression history</h3>
+              <button class="btn btn-ghost" id="ucHistoryRefresh" type="button">Refresh</button>
+            </div>
+            <div class="uc-scroll uc-scroll-x">
+              <table class="uc-table">
+                <thead><tr><th>File</th><th>Original</th><th>Compressed</th><th>Saved</th><th>Encoding</th></tr></thead>
+                <tbody id="ucHistoryBody">
+                  <tr><td colspan="5" class="fine">Sign in to keep a history of what you have compressed.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="reveal">
+          <div class="panel dark uc-vis">
+            <h3>How the compressor works</h3>
+            <p class="fine">The greedy algorithm, step by step, on the file you chose.</p>
+
+            <h4 class="uc-h4">1 · Frequency table</h4>
+            <p class="fine">How often each byte value occurs. One pass over the file — O(N).</p>
+            <div class="uc-scroll">
+              <table class="uc-table">
+                <thead><tr><th>Byte</th><th>Char</th><th>Count</th><th>Share</th><th></th></tr></thead>
+                <tbody id="ucFreqBody"></tbody>
+              </table>
+            </div>
+            <p class="fine" id="ucFreqMore"></p>
+
+            <h4 class="uc-h4">2 · The priority queue</h4>
+            <p class="fine">A min-heap of the symbols, smallest first. The greedy algorithm takes the two smallest and joins them.</p>
+            <div class="uc-chips" id="ucQueue"></div>
+            <p class="fine" id="ucQueueMore"></p>
+            <ol class="uc-rounds" id="ucRounds"></ol>
+
+            <h4 class="uc-h4">3 · The Huffman tree</h4>
+            <p class="fine">Every left turn is a 0, every right turn a 1. The path from the root to a leaf is that symbol's code.</p>
+            <div class="uc-tree-wrap" id="ucTree"></div>
+
+            <h4 class="uc-h4">4 · The codes</h4>
+            <div class="uc-scroll">
+              <table class="uc-table">
+                <thead><tr><th>Byte</th><th>Char</th><th>Code</th><th>Bits</th></tr></thead>
+                <tbody id="ucCodes"></tbody>
+              </table>
+            </div>
+
+            <h4 class="uc-h4">5 · Encoding</h4>
+            <p class="fine">Each byte is replaced by its code, and the codes are packed into bytes.</p>
+            <div class="uc-scroll">
+              <table class="uc-table">
+                <thead><tr><th>#</th><th>Byte</th><th>Char</th><th>Code</th><th>Bits</th></tr></thead>
+                <tbody id="ucEncoding"></tbody>
+              </table>
+            </div>
+            <p class="fine" id="ucEncodingSummary"></p>
+
+            <h4 class="uc-h4">6 · Decoding</h4>
+            <p class="fine">The tree is walked again, one bit at a time, until a leaf is reached.</p>
+            <div class="uc-scroll">
+              <table class="uc-table">
+                <thead><tr><th>#</th><th>Char</th><th>Code</th><th>Bits</th></tr></thead>
+                <tbody id="ucDecoding"></tbody>
+              </table>
+            </div>
+            <p class="fine" id="ucDecodingSummary"></p>
+          </div>
+
+          <div class="panel uc-complexity">
+            <h3>Complexity</h3>
+            <p class="fine">Where N is the number of input bytes and K is the number of distinct byte values.</p>
+            <table class="uc-table">
+              <thead><tr><th>Step</th><th>Cost</th><th></th></tr></thead>
+              <tbody id="ucComplexity"></tbody>
+            </table>
+            <p class="fine">Huffman coding is a lossless <em>entropy</em> coder, not a complete image format. On an image that has already been through a lossy codec it saves little or nothing, and for a very small file the tree it carries can cost more than the file was worth. The dashboard reports that honestly rather than hiding it — which is why the photo is scaled and re-encoded first, and why the number on the dashboard is the size of what is actually stored.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- UNIIMPACT -->
     <section class="section band" id="impact">
       <div class="wrap">
@@ -454,7 +603,8 @@
         <p class="logo-word big">Uni<em>Haat</em></p>
         <p>Your Campus. Your Marketplace.<br/>Verified, hyperlocal, student-to-student.</p>
       </div>
-      <nav aria-label="Footer"><a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#unireserve">UniReserve</a><a href="#impact">UniImpact</a></nav>
+      <nav aria-label="Footer"><a href="#marketplace">Marketplace</a><a href="#demand">Demand Board</a><a href="#clearance">Hostel Clearance</a><a href="#smartprice">SmartPrice</a><a href="#safeswap">SafeSwap</a><a href="#unireserve">UniReserve</a>
+        <a href="#unicompress">UniCompress</a><a href="#impact">UniImpact</a></nav>
       <div>
         <p><strong>Trust &amp; safety</strong></p>
         <p>Verified students only · Report &amp; block · Safe public pickup · No advance payment</p>
@@ -549,6 +699,12 @@
           <label>Listing type<select name="type"><option value="sell">Sell</option><option value="rent">Rent</option><option value="exchange">Exchange</option><option value="free">Free giveaway</option></select></label>
         </div>
         <label>Description<textarea name="description" rows="3" placeholder="Condition, accessories, pickup spot…"></textarea></label>
+        <div class="uc-upload" id="sellPhoto">
+          <label class="uc-upload-label" for="sellPhotoInput">Add a photo <span class="fine">(optional)</span></label>
+          <input type="file" id="sellPhotoInput" name="photo" accept="image/*" />
+          <p class="fine" id="sellPhotoHint">Your photo is compressed with Huffman coding before it is stored, and shown to buyers by putting it back together. No photo is fine — the listing works without one.</p>
+          <div class="uc-upload-result" id="sellPhotoResult" hidden></div>
+        </div>
         <div class="smart-hint" id="sellSmartHint">SmartPrice: enter original price + age for a recommendation.</div>
         <button class="btn btn-primary btn-block" type="submit">Publish listing</button>
       </form>

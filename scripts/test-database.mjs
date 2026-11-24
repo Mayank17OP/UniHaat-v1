@@ -26,7 +26,11 @@ const url =
   process.env.DATABASE_URL ||
   "postgres://postgres@127.0.0.1:55432/postgres";
 
-const SUITES = ["security_regression.sql", "unireserve_regression.sql"];
+const SUITES = [
+  "security_regression.sql",
+  "unireserve_regression.sql",
+  "unicompress_regression.sql",
+];
 
 // The backend suite is a Node program rather than a SQL file: it drives the
 // real functions over the real data, including the concurrency checks.

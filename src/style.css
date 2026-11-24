@@ -70,7 +70,7 @@ h3{font-size:22px;font-weight:700}
 .nav{position:sticky;top:0;z-index:60;background:rgba(255,249,240,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .nav-in{display:flex;align-items:center;gap:20px;padding-top:14px;padding-bottom:14px}
 /* The nav carries more rows than the content, so it gets its own measure */
-.nav .nav-in{max-width:1400px}
+.nav .nav-in{max-width:1660px}
 /* Anchor targets must clear the sticky nav */
 section[id],main [id]{scroll-margin-top:92px}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
@@ -116,8 +116,20 @@ section[id],main [id]{scroll-margin-top:92px}
    These live below the base rules on purpose: media queries carry no
    specificity of their own, so an override that appears earlier in the
    sheet would lose to a plain class rule declared later. */
-@media(max-width:1480px){.logo-tag{display:none}}
-@media(max-width:1320px){.nav-links{display:none}.hamburger{display:flex}}
+/*
+   The nav names eight sections, and with the logo and the buttons on
+   either side of them it needs about 1600px of page. The tagline goes
+   first when the header is crowded, then the links are tightened, and
+   below 1420px they give way to the menu button. None of that is
+   allowed to push the sign-in button off the side of the page, which
+   is what an unwrapped flex row does.
+*/
+@media(max-width:1600px){.logo-tag{display:none}}
+@media(max-width:1500px) and (min-width:1421px){
+  .nav-links{gap:12px}
+  .nav-links a{font-size:13px}
+}
+@media(max-width:1420px){.nav-links{display:none}.hamburger{display:flex}}
 @media(max-width:640px){
   /* Keep the nav on one line: drop the long CTA labels, keep the icons */
   .nav-in{gap:10px}

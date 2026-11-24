@@ -20,6 +20,7 @@ export function listingFromRow(row) {
   const images = (row.listing_images || [])
     .slice()
     .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0));
+  const image = images[0];
   return {
     id: row.id,
     title: row.title,
@@ -39,7 +40,11 @@ export function listingFromRow(row) {
     seller: seller.full_name ?? "Student",
     rating,
     deals: seller.deals_completed ?? 0,
-    img: images[0]?.url ?? "./assets/table-chair.svg",
+    // A compressed image is not a URL — it is a blob the browser has to
+    // fetch and decode before it can be shown. The interface asks for
+    // it by the marker, and the picture is put back together here.
+    img: image?.url ?? "./assets/table-chair.svg",
+    imgCodec: image?.codec ?? "url",
     desc: row.description ?? "",
     accessories: row.accessories ?? "As described",
     repairs: row.repair_history ?? "None",
@@ -199,7 +204,14 @@ export async function publishListing(listing) {
       status: "active",
     });
     if (row) {
-      await SB.addListingImage(row.id, listing.img, listing.title);
+      if (listing.photo) {
+        // The picture is stored as a compressed blob, so the image row
+        // points at the blob rather than at a URL. The blob itself is
+        // written by the caller, which still holds the compressed bytes.
+        await SB.addListingImage(row.id, `uhuf:${row.id}`, listing.title, "huffman");
+      } else {
+        await SB.addListingImage(row.id, listing.img, listing.title);
+      }
     }
     return row;
   } catch (err) {

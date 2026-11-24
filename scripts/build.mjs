@@ -71,8 +71,15 @@ export const isSupabaseConfigured = () =>
  */
 const srcDir = path.join(out, "src");
 const srcFiles = (await readdir(srcDir)).filter((f) => f.endsWith(".js")).sort();
+// The hash covers the stylesheets too. The comment above says the whole
+// built src/ tree; a sheet that changed but did not bust the cache
+// would leave the old styling live, which is the same bug this stamp
+// was added to fix.
+const hashFiles = (await readdir(srcDir))
+  .filter((f) => f.endsWith(".js") || f.endsWith(".css"))
+  .sort();
 const hash = createHash("sha256");
-for (const file of srcFiles) {
+for (const file of hashFiles) {
   hash.update(file);
   hash.update(await readFile(path.join(srcDir, file)));
 }
@@ -92,7 +99,9 @@ for (const file of srcFiles) {
 const html = await readFile(path.join(root, "index.html"), "utf8");
 const stampedHtml = html
   .replace(/(src=["'])\.\/src\/(main\.js)(["'])/g, (_m, pre, spec, post) => `${pre}./src/${spec}?v=${version}${post}`)
-  .replace(/(href=["'])\.\/src\/(style\.css)(["'])/g, (_m, pre, spec, post) => `${pre}./src/${spec}?v=${version}${post}`)
+  // Every stylesheet in src/ gets the same stamp. Naming one of them
+  // here meant a second sheet was served from cache after a change.
+  .replace(/(href=["'])\.\/src\/([\w.-]+\.css)(["'])/g, (_m, pre, spec, post) => `${pre}./src/${spec}?v=${version}${post}`)
   .replace(/(src=["'])\.\/vendor\/(supabase\.js)(["'])/g, (_m, pre, spec, post) => `${pre}./vendor/${spec}?v=${version}${post}`);
 await writeFile(path.join(out, "index.html"), stampedHtml);
 console.log(`✓ stamped index.html and ${srcFiles.length} modules with ?v=${version}`);
