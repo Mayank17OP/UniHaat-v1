@@ -127,7 +127,16 @@ particles, magnetic buttons, word-by-word headline reveal, scroll progress, skel
 
 ```bash
 npm test          # provisions a headless Chromium, then runs the suite
+npm run test:dist # builds the site, then runs the same suite against the build
 ```
+
+The deployed site is `dist/`, not the source tree: the build copies the sources, generates
+`src/config.js`, and stamps a content hash onto every module reference. Each of those
+steps can break the site while the source tree still works perfectly — a module left out
+of the copy, an import rewritten to a file that was not copied, a stylesheet that never
+got a stamp. So the suite runs twice: once against the source tree, and once against
+what the build actually produced.
+
 25 tests in `tests/unihaat.spec.js`: hero/grid, search, category & type filters, Passport +
 SafeSwap modal, SmartPrice (incl. condition selector), Demand Board + UniMatch relevance,
 SafeSwap completion, wishlist persistence, sell flow, chat, verification, UniImpact
@@ -180,7 +189,21 @@ they cannot be reached it says the device did it and still works, the safe seque
 database returned reaches the page, an idle campus does not claim to be unsafe, and a
 campus that really cannot complete every reservation still says so.
 
-That is 67 tests in total.
+15 tests in `tests/unicompress.spec.js` cover UniCompress: that the Huffman engine
+returns the original bytes compared one by one, that a compressed listing photo is
+decoded back into a picture the buyer can actually see, that the stored bytes are the
+compressed ones, that the dashboard reports the right totals, and that the campus-wide
+aggregate is read from the server.
+
+19 tests in `tests/unimail.spec.js` cover UniMail's four tabs in the page. Most of them
+are about what the page says when it cannot reach a mail server, because that is the
+deployed situation: the site is static, so there is no `/api/unimail/*` behind it. A page
+that cannot send mail must say so — it must not print a verification token it never
+sent, and it must not print DNS records it never looked up. The suite also pins down
+that a DNS record is shown as text rather than run: a TXT record is arbitrary text chosen
+by whoever controls that zone.
+
+That is 101 tests in total.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.
@@ -233,6 +256,33 @@ internal functions.
 `scripts/run-sql-suite.mjs` runs a psql-style suite without needing psql, so the
 same file runs in CI, in a container or on a laptop. The suites use `:'name'`
 variables and `\gset`, and the runner understands exactly that much.
+
+### Migration probes (`npm run test:probes`)
+
+The SQL suites check that the schema is right. The probes check a different thing: that
+each migration is actually doing the work it claims to do. A migration that changes
+nothing passes every suite, because the suites only look at the end state. A probe asks
+a narrower question — "if this migration were not applied, would this behaviour be
+gone?" — and checks the answer by applying the migrations without it and watching the
+behaviour disappear.
+
+```bash
+npm run test:probes    # rebuilds the database, then probes it
+```
+
+The scripts that touch the schema put it back together before they exit. The landing
+suite drops the schema to rehearse a migration landing on a populated database, and the
+omission check rebuilds the schema with one migration missing; both restore the whole
+schema afterwards. That matters because the alternative is that the next script to
+connect finds an empty schema and reports that the migrations "do not exist" — which is
+true of the wreckage and not of the migrations.
+
+### UniMail service (`npm run test:unimail`)
+
+The UniMail service is in `server/unimail.mjs` and is covered by `tests/unimail.test.mjs`
+(10 checks): the domain rule, that a token is single-use and expires, that the templates
+render, and that the DNS lookup distinguishes live results from a demonstration mode
+without inventing records. The browser half of UniMail is in `tests/unimail.spec.js`.
 
 ## Deployment
 

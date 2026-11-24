@@ -68,6 +68,24 @@ async function reset() {
   await client.query("grant usage on schema public to anon, authenticated, service_role;");
 }
 
+/**
+ * Put the database back the way it was found: every migration applied, with
+ * the demo data in place.
+ *
+ * This suite is destructive by nature — it drops the schema to rehearse a
+ * migration landing on a populated database. Leaving that behind means the
+ * next script to connect finds an empty schema and reports that the
+ * migrations "do not exist", which is true of the wreckage and not of the
+ * migrations. So the schema is rebuilt before the suite exits.
+ */
+async function rebuild() {
+  await reset();
+  for (const file of files) {
+    await apply(file);
+  }
+  await client.query(fs.readFileSync(path.join(TESTS, "local_seed.sql"), "utf8"));
+}
+
 console.log("\n· the migration lands on a campus that already has data\n");
 
 await reset();
@@ -150,7 +168,7 @@ ok(
   `before ${types.rows[0].n}, after ${typesAfter.rows[0].n}`
 );
 
-await reset();
+await rebuild();
 await client.end();
 
 console.log(`\n${passed} passed, ${failed} failed`);

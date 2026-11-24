@@ -1,5 +1,23 @@
 import { COLLEGES } from "./data.js";
 
+/**
+ * Escape text for the page.
+ *
+ * Most of what this module prints is ours. Some of it is not: a DNS TXT
+ * record is arbitrary text chosen by whoever controls that zone, and it
+ * was being dropped into `innerHTML` unescaped. A zone owner could put
+ * a tag in a TXT record and have it run on the page of every student
+ * who looked the domain up.
+ *
+ * @param {unknown} s
+ * @returns {string}
+ */
+const esc = (s) =>
+  String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+
 const LOCAL_DOMAINS = COLLEGES.map((c) => ({
   domain: c.domain,
   universityShort: c.short,
@@ -49,6 +67,20 @@ export function initUniMail({ toast } = {}) {
   let activeTab = "verify";
   let lastEmail = "";
   let devTokenHint = "";
+  // The messages the forms print live here rather than in the DOM, because
+  // `render()` replaces the whole panel. A message written straight into the
+  // DOM was wiped the moment anything triggered a re-render — so the one
+  // message that mattered most ("Token generated for ...") usually vanished
+  // before anyone could read it.
+  let sendMsg = "";
+  let confirmMsg = "";
+  let dnsMsg = "";
+  let smtpMsg = "";
+  // The inputs are re-rendered too, so what the student typed has to be
+  // remembered here or it is cleared out from under them.
+  let lastToken = "";
+  let lastDnsDomain = "dtu.ac.in";
+  let lastSmtpTo = "";
 
   async function render() {
     const stats = (await api("/api/unimail/stats")) || {
@@ -99,25 +131,25 @@ export function initUniMail({ toast } = {}) {
               <h3>Verify institutional email</h3>
               <p class="fine">Only approved university domains are accepted. Arbitrary <code>.edu</code> or <code>.ac.in</code> domains are rejected.</p>
               <label>Campus Email
-                <input name="email" type="email" required placeholder="you@dtu.ac.in or you@delhitechnicalcampus.ac.in" value="${lastEmail}" />
+                <input name="email" type="email" required placeholder="you@dtu.ac.in or you@delhitechnicalcampus.ac.in" value="${esc(lastEmail)}" />
               </label>
               <button class="btn btn-primary" type="submit">Send verification token</button>
-              <p class="fine" id="umSendMsg"></p>
+              <p class="fine" id="umSendMsg">${esc(sendMsg)}</p>
             </form>
             <form id="umConfirmForm" class="unimail-card">
               <h3>Confirm verification token</h3>
-              <p class="fine">Tokens expire after 15 minutes and are single-use.${devTokenHint ? ` Dev token: <code>${devTokenHint}</code>` : ""}</p>
+              <p class="fine">Tokens expire after 15 minutes and are single-use.${devTokenHint ? ` Dev token: <code>${esc(devTokenHint)}</code>` : ""}</p>
               <label>Campus Email
-                <input name="email" type="email" required placeholder="you@dtu.ac.in" value="${lastEmail}" />
+                <input name="email" type="email" required placeholder="you@dtu.ac.in" value="${esc(lastEmail)}" />
               </label>
               <label>Verification Token
-                <input name="token" required placeholder="Paste 32-char token" value="${devTokenHint}" />
+                <input name="token" required placeholder="Paste 32-char token" value="${esc(lastToken || devTokenHint)}" />
               </label>
               <div class="unimail-row">
                 <button class="btn btn-primary" type="submit">Verify token</button>
                 <button class="btn btn-ghost" type="button" id="umResendBtn">Resend token</button>
               </div>
-              <p class="fine" id="umConfirmMsg"></p>
+              <p class="fine" id="umConfirmMsg">${esc(confirmMsg)}</p>
             </form>
           </div>
         </div>
@@ -147,11 +179,11 @@ export function initUniMail({ toast } = {}) {
                   <tbody>
                     ${stats.domains.map((d) => `
                       <tr>
-                        <td><code>${d.domain}</code></td>
-                        <td>${d.college}</td>
-                        <td>${d.verifiedCount}</td>
+                        <td><code>${esc(d.domain)}</code></td>
+                        <td>${esc(d.college)}</td>
+                        <td>${esc(d.verifiedCount)}</td>
                         <td>
-                          <button class="pill ${d.enabled ? "active" : ""}" data-toggle-domain="${d.domain}" data-enabled="${d.enabled}">
+                          <button class="pill ${d.enabled ? "active" : ""}" data-toggle-domain="${esc(d.domain)}" data-enabled="${d.enabled}">
                             ${d.enabled ? "Enabled" : "Disabled"}
                           </button>
                         </td>
@@ -167,16 +199,16 @@ export function initUniMail({ toast } = {}) {
                 <ul class="unimail-log-list">
                   ${stats.recentLogs.slice(0, 6).map((l) => `
                     <li>
-                      <strong>${l.eventType}</strong> → <code>${l.recipient}</code>
-                      <span class="verdict ${l.status === "failed" ? "verdict-high" : "verdict-good"}">${l.status}</span>
-                      ${l.errorMessage ? `<small>${l.errorMessage}</small>` : ""}
+                      <strong>${esc(l.eventType)}</strong> → <code>${esc(l.recipient)}</code>
+                      <span class="verdict ${l.status === "failed" ? "verdict-high" : "verdict-good"}">${esc(l.status)}</span>
+                      ${l.errorMessage ? `<small>${esc(l.errorMessage)}</small>` : ""}
                     </li>
                   `).join("")}
                 </ul>
               ` : `<p class="fine">No emails sent yet in this session.</p>`}
               <h4 style="margin-top:16px">Email Templates (${stats.templates.length})</h4>
               <ul class="unimail-log-list">
-                ${stats.templates.slice(0, 5).map((t) => `<li><code>${t.eventType}</code> — ${t.subject}</li>`).join("")}
+                ${stats.templates.slice(0, 5).map((t) => `<li><code>${esc(t.eventType)}</code> — ${esc(t.subject)}</li>`).join("")}
               </ul>
             </div>
           </div>
@@ -189,10 +221,10 @@ export function initUniMail({ toast } = {}) {
             <h3>DNS &amp; MX Record Inspector</h3>
             <p class="fine">Performs live DNS resolution (A, AAAA, MX, TXT, SPF, DKIM, DMARC) via the UniMail backend. When offline or for unowned domains, clearly enters <strong>Demonstration Mode</strong> without inventing records.</p>
             <form id="umDnsForm" class="unimail-row" style="margin:12px 0">
-              <input name="domain" required placeholder="dtu.ac.in" value="dtu.ac.in" />
+              <input name="domain" required placeholder="dtu.ac.in" value="${esc(lastDnsDomain)}" />
               <button class="btn btn-primary" type="submit">Lookup DNS</button>
             </form>
-            <div id="umDnsResult" class="unimail-dns-box">Enter a domain and click Lookup DNS.</div>
+            <div id="umDnsResult" class="unimail-dns-box">${dnsMsg || "Enter a domain and click Lookup DNS."}</div>
           </div>
         </div>
       ` : ""}
@@ -205,27 +237,27 @@ export function initUniMail({ toast } = {}) {
               <span>1. Student Registration</span><i>→</i>
               <span>2. Domain Validation</span><i>→</i>
               <span>3. DNS / MX Lookup</span><i>→</i>
-              <span>4. SMTP Server (${smtp.tls})</span><i>→</i>
+              <span>4. SMTP Server (${esc(smtp.tls)})</span><i>→</i>
               <span>5. Recipient Mail Server</span><i>→</i>
               <span>6. Email Delivery</span>
             </div>
             <div class="unimail-concepts">
               <div><strong>DNS Resolution:</strong> Translates institutional domains into IPv4 (<code>A</code>) and IPv6 (<code>AAAA</code>) addresses.</div>
               <div><strong>MX Records:</strong> Mail Exchange records specify the recipient's mail server and priority order.</div>
-              <div><strong>SMTP Transmission:</strong> Simple Mail Transfer Protocol pushes outbound mail over port ${smtp.port} with ${smtp.tls}.</div>
+              <div><strong>SMTP Transmission:</strong> Simple Mail Transfer Protocol pushes outbound mail over port ${esc(smtp.port)} with ${esc(smtp.tls)}.</div>
               <div><strong>SPF / DKIM / DMARC:</strong> TXT-based authentication proving sender IP authorization, cryptographic signature, and alignment policy.</div>
               <div><strong>POP3 / IMAP:</strong> Retrieval protocols used by mail clients to fetch/sync inbox messages (not configured on this outbound-only UniMail relay).</div>
             </div>
           </div>
           <div class="unimail-card">
             <h3>SMTP Relay Status</h3>
-            <p class="fine">Host: <code>${smtp.host}</code> · Port: <code>${smtp.port}</code> · Security: <code>${smtp.tls}</code> · Sender: <code>${smtp.from}</code></p>
-            <p class="fine">${smtp.note}</p>
+            <p class="fine">Host: <code>${esc(smtp.host)}</code> · Port: <code>${esc(smtp.port)}</code> · Security: <code>${esc(smtp.tls)}</code> · Sender: <code>${esc(smtp.from)}</code></p>
+            <p class="fine">${esc(smtp.note)}</p>
             <form id="umTestSmtpForm" class="unimail-row" style="margin-top:12px">
-              <input name="to" type="email" required placeholder="test-recipient@dtu.ac.in" />
+              <input name="to" type="email" required placeholder="test-recipient@dtu.ac.in" value="${esc(lastSmtpTo)}" />
               <button class="btn btn-primary" type="submit">Send Test Email</button>
             </form>
-            <p class="fine" id="umTestSmtpMsg"></p>
+            <p class="fine" id="umTestSmtpMsg">${esc(smtpMsg)}</p>
           </div>
         </div>
       ` : ""}
@@ -244,19 +276,20 @@ export function initUniMail({ toast } = {}) {
       e.preventDefault();
       const email = new FormData(e.target).get("email");
       lastEmail = String(email || "");
-      const msg = root.querySelector("#umSendMsg");
       const res = await api("/api/unimail/verify/send", { method: "POST", body: JSON.stringify({ email }) });
       if (!res) {
-        msg.textContent = "Static mode: start `npm run dev:unimail` for live SMTP token delivery.";
+        sendMsg = "Static mode: start `npm run dev:unimail` for live SMTP token delivery.";
+        render();
         return;
       }
       if (!res.ok) {
-        msg.textContent = res.error;
+        sendMsg = res.error;
         toast?.(res.error);
+        render();
         return;
       }
       devTokenHint = res.devToken || "";
-      msg.textContent = `Token generated for ${res.college} (${res.domain}).`;
+      sendMsg = `Token generated for ${res.college} (${res.domain}).`;
       toast?.(`Verification token sent to ${res.email}`);
       render();
     });
@@ -265,17 +298,19 @@ export function initUniMail({ toast } = {}) {
     root.querySelector("#umConfirmForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const msg = root.querySelector("#umConfirmMsg");
+      lastToken = String(fd.get("token") || "");
       const res = await api("/api/unimail/verify/confirm", {
         method: "POST",
         body: JSON.stringify({ email: fd.get("email"), token: fd.get("token") }),
       });
       if (!res) {
-        msg.textContent = "Static mode: start `npm run dev:unimail` to verify tokens.";
+        confirmMsg = "Static mode: start `npm run dev:unimail` to verify tokens.";
+        render();
         return;
       }
-      msg.textContent = res.ok ? `Verified! ${res.email} (${res.college})` : res.error;
+      confirmMsg = res.ok ? `Verified! ${res.email} (${res.college})` : res.error;
       toast?.(res.ok ? `Email verified for ${res.college}` : res.error);
+      render();
     });
 
     // Wire Resend
@@ -284,10 +319,13 @@ export function initUniMail({ toast } = {}) {
       const res = await api("/api/unimail/verify/send", { method: "POST", body: JSON.stringify({ email: lastEmail }) });
       if (res?.ok) {
         devTokenHint = res.devToken || "";
+        sendMsg = `Token generated for ${res.college} (${res.domain}).`;
         toast?.("New verification token issued.");
         render();
       } else if (res?.error) {
+        sendMsg = res.error;
         toast?.(res.error);
+        render();
       }
     });
 
@@ -324,39 +362,47 @@ export function initUniMail({ toast } = {}) {
     root.querySelector("#umDnsForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const domain = new FormData(e.target).get("domain");
-      const box = root.querySelector("#umDnsResult");
-      box.textContent = "Resolving DNS records…";
+      lastDnsDomain = String(domain || "");
+      dnsMsg = "Resolving DNS records…";
+      render();
       const res = await api(`/api/unimail/dns?domain=${encodeURIComponent(domain)}`);
       if (!res) {
-        box.innerHTML = `<strong>Demonstration Mode:</strong> Live DNS requires the UniMail backend (<code>npm run dev:unimail</code>). No real DNS records were invented.`;
+        dnsMsg = `<strong>Demonstration Mode:</strong> Live DNS requires the UniMail backend (<code>npm run dev:unimail</code>). No real DNS records were invented.`;
+        render();
         return;
       }
       if (!res.ok) {
-        box.textContent = res.error;
+        dnsMsg = esc(res.error);
+        render();
         return;
       }
-      box.innerHTML = `
-        <p><strong>Mode:</strong> ${res.mode === "live" ? "Live DNS Lookup" : "Demonstration Mode"} ${res.note ? `— ${res.note}` : ""}</p>
-        <p><strong>A:</strong> ${res.a.length ? res.a.join(", ") : "None"}</p>
-        <p><strong>AAAA:</strong> ${res.aaaa.length ? res.aaaa.join(", ") : "None"}</p>
-        <p><strong>MX:</strong> ${res.mx.length ? res.mx.map((m) => `${m.exchange} (pri ${m.priority})`).join(", ") : "None"}</p>
-        <p><strong>SPF:</strong> ${res.spf || "None"}</p>
-        <p><strong>DKIM:</strong> ${res.dkim || "None"}</p>
-        <p><strong>DMARC:</strong> ${res.dmarc || "None"}</p>
+      // Every record below is text chosen by whoever controls that DNS zone,
+      // so it is escaped before it becomes markup.
+      dnsMsg = `
+        <p><strong>Mode:</strong> ${res.mode === "live" ? "Live DNS Lookup" : "Demonstration Mode"} ${res.note ? `— ${esc(res.note)}` : ""}</p>
+        <p><strong>A:</strong> ${res.a.length ? esc(res.a.join(", ")) : "None"}</p>
+        <p><strong>AAAA:</strong> ${res.aaaa.length ? esc(res.aaaa.join(", ")) : "None"}</p>
+        <p><strong>MX:</strong> ${res.mx.length ? esc(res.mx.map((m) => `${m.exchange} (pri ${m.priority})`).join(", ")) : "None"}</p>
+        <p><strong>SPF:</strong> ${res.spf ? esc(res.spf) : "None"}</p>
+        <p><strong>DKIM:</strong> ${res.dkim ? esc(res.dkim) : "None"}</p>
+        <p><strong>DMARC:</strong> ${res.dmarc ? esc(res.dmarc) : "None"}</p>
       `;
+      render();
     });
 
     // Wire Test SMTP
     root.querySelector("#umTestSmtpForm")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const to = new FormData(e.target).get("to");
-      const msg = root.querySelector("#umTestSmtpMsg");
+      lastSmtpTo = String(to || "");
       const res = await api("/api/unimail/smtp/test", { method: "POST", body: JSON.stringify({ to }) });
       if (!res) {
-        msg.textContent = "Static mode: start `npm run dev:unimail` to test SMTP delivery.";
+        smtpMsg = "Static mode: start `npm run dev:unimail` to test SMTP delivery.";
+        render();
         return;
       }
-      msg.textContent = res.ok ? `Test email sent to ${to}` : (res.delivery?.errorMessage || res.error || "SMTP delivery failed");
+      smtpMsg = res.ok ? `Test email sent to ${to}` : (res.delivery?.errorMessage || res.error || "SMTP delivery failed");
+      render();
     });
   }
 
