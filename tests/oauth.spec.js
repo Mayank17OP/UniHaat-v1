@@ -70,7 +70,7 @@ async function mockGoogle(page, opts = {}) {
       if (p === "/auth/v1/authorize") {
         calls.authorize = Object.fromEntries(url.searchParams);
         const target = opts.deny
-          ? "http://localhost:5173/?error=access_denied&error_code=access_denied&error_description=The+user+denied+the+request."
+          ? `${BASE}/?error=access_denied&error_code=access_denied&error_description=The+user+denied+the+request.`
           : `${SB}/auth/v1/callback`;
         await route.fulfill({
           status: 200,
@@ -80,7 +80,7 @@ async function mockGoogle(page, opts = {}) {
         return;
       }
       if (p === "/auth/v1/callback") {
-        const back = new URL(calls.authorize?.redirect_to || "http://localhost:5173/");
+        const back = new URL(calls.authorize?.redirect_to || BASE);
         back.searchParams.set("code", "mock-pkce-code");
         await route.fulfill({
           status: 200,
