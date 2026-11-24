@@ -103,7 +103,12 @@ columns it renders instead of asking for the whole row, and it never asks for th
 private columns (`email`, `student_id`, `role`) that the database does not grant to a
 client.
 
-That is 40 tests in total.
+2 tests in `tests/live-sync.spec.js` cover the signed-in marketplace: the listing query
+names the seller's foreign key (PostgREST cannot resolve it on its own, because
+`wishlists` reaches `profiles` through the same two tables), and a live listing replaces
+its offline twin instead of being shown next to it.
+
+That is 42 tests in total.
 
 > `npm test` auto-provisions Chromium from the `@sparticuz/chromium` npm package, so it runs
 > even where the Playwright browser CDN is unreachable.

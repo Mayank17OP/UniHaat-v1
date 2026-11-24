@@ -244,7 +244,11 @@ export async function fetchListings({ category, type, search } = {}) {
   if (!supa) return null;
   let query = supa
     .from("listings")
-    .select("*, listing_images(url, alt, sort), profiles(id, full_name, avatar_url, rating_sum, rating_count, deals_completed, verified, colleges(short_name))")
+    // The seller is named through the listing's own foreign key. PostgREST
+    // cannot pick that relationship on its own — `wishlists` reaches
+    // `profiles` through the same pair of tables — so it has to be spelled
+    // out, or the whole query fails with PGRST201.
+    .select("*, listing_images(url, alt, sort), profiles!listings_seller_id_fkey(id, full_name, avatar_url, rating_sum, rating_count, deals_completed, verified, colleges(short_name))")
     .eq("status", "active")
     .order("created_at", { ascending: false });
 

@@ -299,8 +299,8 @@ Supporting: listings/week, demand match rate, median time-to-sell, wishlist→bu
 ## 15. Acceptance Criteria (v1 Prototype)
 
 All criteria below are implemented and covered by the Playwright suite in `tests/unihaat.spec.js`,
-`tests/oauth.spec.js`, `tests/counters.spec.js` and `tests/profile-privacy.spec.js`
-(40 tests, all passing). See §16 for the
+`tests/oauth.spec.js`, `tests/counters.spec.js`, `tests/profile-privacy.spec.js` and
+`tests/live-sync.spec.js` (42 tests, all passing). See §16 for the
 verification record.
 
 - [x] Browse/search/filter/sort 14 realistic listings; wishlist persists across reload.
@@ -627,6 +627,18 @@ The backend is the Supabase project above. Migrations `0001`–`0008` are applie
   role may touch; the grants say *which columns and which functions* it may touch at
   all, and both have to be narrow. `supabase/tests/security_regression.sql` is the
   regression suite for that surface.
+
+- **The signed-in marketplace was never connected to the database.** The listing query
+  embedded the seller as `profiles(...)`, and PostgREST could not pick the relationship
+  on its own: `wishlists` reaches `profiles` through the same two tables, so the
+  request failed with `PGRST201` — *"Could not embed because more than one relationship
+  was found"*. The app caught the error and kept its offline catalogue, so the failure
+  was invisible: the grid looked the same, and a listing a student had published was
+  never read back from the database. The relationship is now named
+  (`profiles!listings_seller_id_fkey(...)`), and the live rows are matched against
+  their offline twin by title — the seller is abbreviated offline ("Aarav S.") and
+  spelled out in the database ("Aarav Sharma"), so the title is the only part of a
+  listing the two datasets can be matched on. `tests/live-sync.spec.js` covers both.
 
 ### The motion layer (`src/alive.js`)
 Motion is treated as a response to input rather than decoration. Every primitive animates
