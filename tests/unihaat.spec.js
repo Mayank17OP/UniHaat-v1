@@ -4,7 +4,9 @@ const BASE = process.env.BASE_URL || "http://localhost:5173";
 
 test("hero renders and marketplace lists verified listings", async ({ page }) => {
   await page.goto(BASE);
-  await expect(page.getByRole("heading", { name: /Your Campus/i })).toBeVisible();
+  // The hero's own heading. Another section's heading also begins
+  // "Your Campus", so the level is what makes this unambiguous.
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   const cards = page.locator("#productGrid .card");
   await expect(cards.first()).toBeVisible();
   expect(await cards.count()).toBeGreaterThan(10);

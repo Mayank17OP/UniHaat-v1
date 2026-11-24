@@ -70,7 +70,7 @@ h3{font-size:22px;font-weight:700}
 .nav{position:sticky;top:0;z-index:60;background:rgba(255,249,240,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .nav-in{display:flex;align-items:center;gap:20px;padding-top:14px;padding-bottom:14px}
 /* The nav carries more rows than the content, so it gets its own measure */
-.nav .nav-in{max-width:1400px}
+.nav .nav-in{max-width:1860px}
 /* Anchor targets must clear the sticky nav */
 section[id],main [id]{scroll-margin-top:92px}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
@@ -116,8 +116,28 @@ section[id],main [id]{scroll-margin-top:92px}
    These live below the base rules on purpose: media queries carry no
    specificity of their own, so an override that appears earlier in the
    sheet would lose to a plain class rule declared later. */
-@media(max-width:1480px){.logo-tag{display:none}}
-@media(max-width:1320px){.nav-links{display:none}.hamburger{display:flex}}
+/*
+   The nav names nine sections, and with the logo and the buttons on
+   either side of them it needs about 1830px of page. The numbers below
+   come from measuring the row, not from guessing: the tagline goes
+   first when the header is crowded, then the links are tightened, and
+   below 1640px they give way to the menu button. None of that is
+   allowed to push the sign-in button off the side of the page, which
+   is what an unwrapped flex row does.
+
+   The location toggle and the connection pill give way next, one after
+   the other, and the menu carries the location control instead.
+*/
+@media(max-width:1830px){.logo-tag{display:none}}
+@media(max-width:1830px) and (min-width:1641px){
+  .nav-links{gap:12px}
+  .nav-links a{font-size:13px}
+}
+@media(max-width:1640px){.nav-links{display:none}.hamburger{display:flex}}
+@media(max-width:900px){
+  /* The connection pill is a decoration. It is the first thing to go. */
+  #syncPill{display:none}
+}
 @media(max-width:640px){
   /* Keep the nav on one line: drop the long CTA labels, keep the icons */
   .nav-in{gap:10px}
@@ -219,6 +239,11 @@ section[id],main [id]{scroll-margin-top:92px}
 .pill{border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;transition:all .2s var(--ease-out)}
 .pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .select-wrap select{border:1px solid var(--line-2);border-radius:999px;padding:10px 14px;background:#fff;font-weight:600}
+/* A select is as wide as its longest option, and one of the college
+   names is long. Without this the option text sets the width of the
+   whole toolbar and the row runs off a narrow phone. */
+.select-wrap{min-width:0}
+.select-wrap select{max-width:100%}
 .results-meta{font-family:var(--font-m);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:18px 2px 12px}
 
 /* Product grid */
@@ -665,6 +690,13 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .header-loc-btn.set svg{color:var(--green)}
 @media(max-width:720px){
   .header-loc-btn{padding:6px 10px;font-size:12px;max-width:135px}
+}
+/* Below this the header has no room for it, and the menu carries the
+   location control instead. The override sits here, after the base
+   rule, because a media query carries no specificity of its own: a
+   base rule declared later would silently win. */
+@media(max-width:1000px){
+  .header-loc-btn{display:none}
 }
 
 /* UniMail — DNS & SMTP Infrastructure */

@@ -37,6 +37,13 @@ export const getMode = () => mode;
 export const getSession = () => session;
 export const getUser = () => session?.user ?? null;
 export const isSignedIn = () => Boolean(session?.user);
+/**
+ * The signed-in student's id, or null when nobody is signed in.
+ *
+ * The chat needs it to tell "my message" from "the other student's",
+ * and the database needs it to write a message with a real sender.
+ */
+export const currentUserId = () => session?.user?.id ?? null;
 
 export function onAuthChange(fn) {
   listeners.add(fn);
@@ -282,7 +289,7 @@ export async function fetchListings({ category, type, search } = {}) {
     // cannot pick that relationship on its own — `wishlists` reaches
     // `profiles` through the same pair of tables — so it has to be spelled
     // out, or the whole query fails with PGRST201.
-    .select("*, listing_images(url, alt, sort), profiles!listings_seller_id_fkey(id, full_name, avatar_url, rating_sum, rating_count, deals_completed, verified, colleges(short_name))")
+    .select("*, listing_images(url, alt, sort, codec), profiles!listings_seller_id_fkey(id, full_name, avatar_url, rating_sum, rating_count, deals_completed, verified, colleges(short_name))")
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
@@ -307,14 +314,105 @@ export async function createListing(listing) {
   return data;
 }
 
-export async function addListingImage(listingId, url, alt) {
+/**
+ * Attach a picture to a listing.
+ *
+ * `codec` says how the picture is stored. A 'url' picture is fetched
+ * straight from the address. A 'huffman' picture is not a URL at all:
+ * the address is a marker, and the browser fetches the compressed blob
+ * and puts it back together before it can be shown.
+ */
+export async function addListingImage(listingId, url, alt, codec = "url") {
   const supa = getClient();
   if (!supa || !listingId || !url) return null;
   const { data, error } = await supa
     .from("listing_images")
-    .insert({ listing_id: listingId, url, alt: alt || null, sort: 0 })
+    .insert({ listing_id: listingId, url, alt: alt || null, sort: 0, codec })
     .select()
     .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/* ------------------------------------------------------------ UniCompress */
+
+/**
+ * Store a listing image as a Huffman-compressed blob.
+ *
+ * The bytes go to the database as base64 in a JSON argument. PostgREST
+ * takes `bytea` as a hex string, and base64 is what the browser can
+ * produce without a second library — the server turns it into bytes.
+ *
+ * @param {{listingId: string, payload: string, tree: object, codeLengths: object,
+ *          originalBytes: number, compressedBytes: number, mimeType: string,
+ *          fileName: string, encodingMs: number, verified: boolean}} blob
+ */
+export async function putListingImageBlob(blob) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("put_listing_image_blob", {
+    p_listing_id: blob.listingId,
+    // The argument is named for what it carries. The bytes travel as
+    // base64 because PostgREST puts two hex characters on the wire
+    // for every byte of a `bytea`, which is the opposite of the point.
+    p_payload_base64: blob.payload,
+    p_tree: blob.tree,
+    p_code_lengths: blob.codeLengths,
+    p_original_bytes: blob.originalBytes,
+    p_compressed_bytes: blob.compressedBytes,
+    p_mime_type: blob.mimeType,
+    p_file_name: blob.fileName,
+    p_encoding_ms: blob.encodingMs,
+    p_verified: blob.verified,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** Read a listing's compressed image back, tree and all. */
+export async function getListingImageBlob(listingId) {
+  const supa = getClient();
+  if (!supa || !listingId) return null;
+  const { data, error } = await supa.rpc("get_listing_image_blob", {
+    p_listing_id: listingId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** Record a compression in the student's history. */
+export async function recordCompression(entry) {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.rpc("record_compression", {
+    p_file_name: entry.fileName,
+    p_mime_type: entry.mimeType,
+    p_original_bytes: entry.originalBytes,
+    p_compressed_bytes: entry.compressedBytes,
+    p_encoding_ms: entry.encodingMs,
+    p_decoding_ms: entry.decodingMs,
+    p_codec: entry.codec,
+  });
+  if (error) throw error;
+  return data;
+}
+
+/** The student's own compression history, newest first. */
+export async function fetchCompressionHistory(limit = 20) {
+  const supa = getClient();
+  if (!supa || !isSignedIn()) return [];
+  const { data, error } = await supa.rpc("fetch_compression_history", {
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** What the campus has saved in total. */
+export async function fetchCompressionTotals() {
+  const supa = getClient();
+  if (!supa) return null;
+  const { data, error } = await supa.from("compression_totals").select("*").maybeSingle();
   if (error) throw error;
   return data;
 }

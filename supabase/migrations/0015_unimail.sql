@@ -106,11 +106,22 @@ insert into public.unimail_templates (event_type, subject, body_preview) values
 on conflict (event_type) do nothing;
 
 -- RLS: public read on universities, domains, templates; server-only write on tokens/logs
+--
+-- The policies are forced, not merely enabled. The owner of a table
+-- carries the BYPASSRLS attribute, so with the policies only enabled
+-- the owner would sit outside them — and the owner is the role that
+-- writes to the token and log tables.
 alter table public.unimail_universities enable row level security;
 alter table public.unimail_domains enable row level security;
 alter table public.unimail_tokens enable row level security;
 alter table public.unimail_logs enable row level security;
 alter table public.unimail_templates enable row level security;
+
+alter table public.unimail_universities force row level security;
+alter table public.unimail_domains force row level security;
+alter table public.unimail_tokens force row level security;
+alter table public.unimail_logs force row level security;
+alter table public.unimail_templates force row level security;
 
 drop policy if exists unimail_universities_read on public.unimail_universities;
 create policy unimail_universities_read on public.unimail_universities for select to anon, authenticated using (true);

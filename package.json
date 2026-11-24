@@ -11,7 +11,11 @@
     "setup:google": "node scripts/configure-google-auth.mjs",
     "test": "node scripts/setup-browser.mjs && npx playwright test",
     "test:sql": "node scripts/run-sql-suite.mjs",
-    "test:db": "node scripts/test-database.mjs"
+    "test:db": "node scripts/test-database.mjs",
+    "test:engine": "node scripts/engine-check.mjs && node scripts/optimality-check.mjs",
+    "test:overflow": "node scripts/overflow-check.mjs",
+    "test:probes": "node scripts/migration-probes.mjs --prepare",
+    "test:unimail": "node --test tests/unimail.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",

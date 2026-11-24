@@ -11,6 +11,7 @@
 // assertions are about the query the app actually sends.
 
 import { test, expect } from "@playwright/test";
+import { dismissLocationPrompt } from "./support/location-prompt.js";
 
 const BASE = process.env.BASE_URL || "http://localhost:5173";
 const SB = "https://gzbmqwvybcmxlsgouhyh.supabase.co";
@@ -197,6 +198,7 @@ test("the listing and demand joins only name public profile fields", async ({ pa
 test("the app never writes the campus itself", async ({ page }) => {
   const calls = await mockGoogle(page);
   await signIn(page);
+  await dismissLocationPrompt(page);
 
   // The campus is read off the address, so the app has nothing to write.
   await page.click("#avatarBtn");

@@ -19,6 +19,10 @@ import {
   initTilt, initTypeReveal, initLiveDots, showSkeletons, hideSkeletons,
 } from "./alive.js";
 import { initReserve } from "./reserve.js";
+import {
+  initUniCompress, compressFile, storeListingImage, formatBytes,
+  hydrateCompressedImages,
+} from "./unicompress.js";
 import { initUniMail, triggerUniMailNotification } from "./unimail.js";
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -332,6 +336,20 @@ function openProduct(id) {
 /* ---------- Overlays ---------- */
 function openOverlay(sel) { $(sel).hidden = false; document.body.style.overflow = "hidden"; }
 function closeOverlays() { $$(".overlay").forEach((o) => (o.hidden = true)); document.body.style.overflow = ""; }
+/**
+ * Close one overlay and leave the rest alone.
+ *
+ * The location prompt and the campus picker are separate overlays, and
+ * one of them is often closed while the other opens — the student
+ * says no to the prompt and is taken straight to the picker. Closing
+ * all of them there would close the picker again.
+ */
+function closeOverlay(sel) {
+  const overlay = $(sel);
+  if (overlay) overlay.hidden = true;
+  // The page scrolls again once the last overlay has gone.
+  if (!$$(".overlay").some((o) => !o.hidden)) document.body.style.overflow = "";
+}
 $$(".overlay").forEach((o) => o.addEventListener("click", (e) => { if (e.target === o) closeOverlays(); }));
 $$("[data-close]").forEach((b) => b.addEventListener("click", closeOverlays));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeOverlays(); $("#chatDrawer").hidden = true; } });
@@ -592,29 +610,104 @@ function sellHint() {
   $("#sellSmartHint").textContent = `SmartPrice recommends ${fmt(sp.rec)} (fair range ${fmt(sp.low)}–${fmt(sp.high)}) for this item.`;
 }
 $("#sellForm").addEventListener("input", sellHint);
+
+/* ---------- Sell photo (UniCompress) ----------
+ *
+ * The photo is optional. When one is chosen it is compressed with
+ * Huffman coding in the browser, and the compressed blob is what gets
+ * stored with the listing. The card shows the picture by putting the
+ * blob back together, so a buyer sees the photo the seller uploaded.
+ *
+ * Nothing about this changes the listing itself: a listing without a
+ * photo is a perfectly good listing, and the form works the same way
+ * whether the field was filled in or not.
+ */
+
+// The compressed photo, kept until the listing is published.
+let sellPhoto = null;
+
+$("#sellPhotoInput")?.addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  const result = $("#sellPhotoResult");
+  if (!file) {
+    sellPhoto = null;
+    if (result) {
+      result.hidden = true;
+      result.removeAttribute("data-state");
+    }
+    return;
+  }
+
+  if (result) {
+    result.hidden = false;
+    result.dataset.state = "";
+    result.textContent = `Compressing ${file.name}…`;
+  }
+
+  try {
+    const compressed = await compressFile(file);
+    sellPhoto = compressed;
+    if (result) {
+      if (compressed.identical) {
+        result.dataset.state = "";
+        result.innerHTML = `<strong>${compressed.fileName}</strong> · ${formatBytes(compressed.originalBytes)} → <strong>${formatBytes(compressed.payload.length)}</strong> stored
+          <br>Compressed with Huffman coding and verified byte for byte.`;
+      } else {
+        result.dataset.state = "bad";
+        result.textContent = "That file could not be compressed and verified, so the photo was left out.";
+        sellPhoto = null;
+      }
+    }
+  } catch (err) {
+    console.warn("[UniCompress] could not compress the photo:", err?.message);
+    sellPhoto = null;
+    if (result) {
+      result.dataset.state = "bad";
+      result.textContent = `That file could not be compressed — ${err.message}`;
+    }
+  }
+});
+
 $("#sellForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const f = e.target;
   const profile = getProfileData();
+  const photo = sellPhoto;
   const p = {
     id: "p" + Date.now(), title: f.title.value, price: +f.price.value || 0, original: +f.original.value || +f.price.value,
     type: f.type.value, category: f.category.value, condition: f.condition.value, ageMonths: +f.age.value || 6,
     distance: 0.2, college: profile?.colleges?.short_name || "DTU", scope: "same",
     seller: profile?.full_name || "You", rating: null, deals: 0,
-    img: "./assets/kettle.svg",
+    // A photo the student uploaded shows as the picture they chose.
+    // Without one, the listing keeps the illustration it always had.
+    img: photo ? URL.createObjectURL(new Blob([photo.restoredBytes], { type: photo.mimeType })) : "./assets/kettle.svg",
     desc: f.description.value || "Listed via UniHaat Sell.", accessories: "As described", repairs: "None", battery: null, clearance: false, created: 0,
   };
-  products.unshift(p); renderGrid(); closeOverlays(); f.reset(); $("#sellSmartHint").textContent = "SmartPrice: enter original price + age for a recommendation.";
+  // The compressed photo travels with the listing to the database.
+  p.photo = photo;
+  products.unshift(p); renderGrid(); closeOverlays(); f.reset(); sellPhoto = null;
+  $("#sellPhotoResult").hidden = true;
+  $("#sellPhotoHint").textContent = "Your photo is compressed with Huffman coding before it is stored, and shown to buyers by putting it back together. No photo is fine — the listing works without one.";
+  $("#sellSmartHint").textContent = "SmartPrice: enter original price + age for a recommendation.";
   toast("Listing published — UniMatch is notifying matching demands");
   $("#marketplace").scrollIntoView({ behavior: "smooth" });
 
   // Persist to Supabase when signed in (fire-and-forget; the row is live)
   if (signedIn) {
-    publishListing(p).then((row) => {
+    publishListing(p).then(async (row) => {
       if (row) {
         p.id = row.id;
         p.live = true;
         renderGrid();
+        // The compressed blob is stored against the listing. The card
+        // already shows the photo; this is what makes it survive a
+        // reload and what a buyer actually downloads.
+        if (p.photo) {
+          const stored = await storeListingImage({ listingId: row.id, compressed: p.photo });
+          if (stored) {
+            toast("Photo compressed and stored — UniCompress");
+          }
+        }
         toast("Listing saved to your Supabase account");
       } else {
         toast("Published locally — sign in to keep it in the cloud");
@@ -910,6 +1003,7 @@ updateLocationUI();
 /* ---------- Init ---------- */
 renderGrid(); renderDemands(); renderSmart(); newSwapCode();
 initReserve({ toast, listings: products });
+initUniCompress({ toast });
 initUniMail({ toast });
 initScrollProgress();
 initMagnetic();
@@ -944,6 +1038,10 @@ initAuthUI({
           if (!dupe) merged.push(local);
         });
         products = merged;
+        // Some of those photos were stored compressed. Put them back
+        // together before the grid draws them, so a card shows the
+        // picture the seller uploaded rather than a broken image.
+        await hydrateCompressedImages(products);
       }
       if (liveDemands?.length) {
         const merged = [...liveDemands];

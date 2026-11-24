@@ -1,0 +1,127 @@
+/* ============================================================================
+   UniCompress — Huffman coding on the server.
+
+   The section is deliberately plain: tables of numbers and a diagram.
+   The numbers are the point, so they are given room and a monospace
+   face, and nothing is coloured to flatter the result — a file that
+   grew is marked as one that grew.
+   ============================================================================ */
+
+.uc-layout{display:grid;grid-template-columns:1fr 1fr;gap:26px;align-items:start}
+/*
+   A grid item's default `min-width` is its content's intrinsic width,
+   so a wide table inside one would push the whole page sideways on a
+   narrow screen. Letting the items shrink below their content is what
+   keeps the section inside the viewport; the tables themselves scroll.
+*/
+.uc-layout>*{min-width:0}
+@media(max-width:1020px){.uc-layout{grid-template-columns:1fr}}
+
+/* ---------- the drop zone ---------- */
+
+.uc-drop{border:2px dashed var(--line-2);border-radius:var(--radius);background:var(--card);padding:30px 24px;text-align:center;transition:border-color .2s,background .2s}
+.uc-drop[data-drag="yes"]{border-color:var(--mustard);background:var(--mustard-soft)}
+.uc-drop-title{font-family:var(--font-d);font-size:22px;font-weight:900;margin:0 0 6px}
+.uc-drop .btn{margin:14px 0 10px;display:inline-block}
+.uc-drop .fine{margin:6px 0 0;display:block}
+#ucStatus{margin-top:12px;font-weight:600}
+#ucStatus[data-state="busy"]{color:var(--ink-2)}
+#ucStatus[data-state="ok"]{color:var(--green)}
+#ucStatus[data-state="bad"]{color:var(--accent-dark)}
+
+/* ---------- the dashboard ---------- */
+
+.uc-dash{margin-top:22px}
+.uc-dash h3{margin-top:0}
+.uc-verdict{font-size:12px;font-weight:700;text-align:right;max-width:260px}
+.uc-verdict[data-ok="yes"]{color:var(--green)}
+.uc-verdict[data-ok="no"]{color:var(--accent-dark)}
+
+.uc-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
+.uc-stats>div{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);padding:13px 12px;min-width:0}
+.uc-stats span{display:block;font-size:11px;font-weight:700;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+.uc-stats strong{display:block;margin-top:5px;font-family:var(--font-d);font-size:22px;font-weight:900;line-height:1.1;letter-spacing:-.01em;overflow-wrap:anywhere}
+.uc-stats em{display:block;margin-top:2px;font-style:normal;font-size:12px;color:var(--ink-2)}
+@media(max-width:700px){.uc-stats{grid-template-columns:repeat(2,1fr)}}
+
+/* The campus total: a count for everyone, underneath the file's own
+   numbers. It is set apart so nobody mistakes it for this file. */
+.uc-campus{margin-top:18px;padding-top:16px;border-top:1px dashed var(--line)}
+.uc-campus h4{margin:0;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)}
+.uc-stats-campus{margin-top:10px}
+.uc-stats-campus>div{background:var(--paper-2,var(--paper))}
+.uc-stats-campus strong{font-size:19px}
+.uc-campus .fine{margin:10px 0 0}
+
+/* A ratio above 1 means the file grew. It is marked, not hidden. */
+#ucRatio[data-grew="yes"]{color:var(--accent-dark)}
+#ucRatio[data-grew="no"]{color:var(--green)}
+
+/* The same for the Huffman-only saving: a loss is shown as a loss. */
+#ucHuffmanSaving[data-grew="yes"]{color:var(--accent-dark)}
+#ucHuffmanSaving[data-grew="no"]{color:var(--green)}
+
+.uc-note{margin-top:14px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--accent-soft);border:1px solid #F3C3B2;color:var(--accent-dark);font-size:12.5px;line-height:1.55}
+
+/* ---------- before and after ---------- */
+
+.uc-compare{margin-top:22px}
+.uc-images{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px}
+@media(max-width:560px){.uc-images{grid-template-columns:1fr}}
+.uc-images figure{margin:0}
+.uc-images img{width:100%;height:190px;object-fit:contain;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);display:block}
+.uc-images figcaption{margin-top:7px;font-size:12px;font-weight:700;color:var(--ink-2)}
+
+/* ---------- tables ---------- */
+
+.uc-table{width:100%;border-collapse:collapse;font-size:13px}
+.uc-table th{text-align:left;font-size:11px;font-weight:800;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--line)}
+.uc-table td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.uc-table tr:last-child td{border-bottom:0}
+.panel.dark .uc-table th{color:#B9AC9C;border-bottom-color:#3A322A}
+.panel.dark .uc-table td{border-bottom-color:#3A322A}
+.uc-scroll{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);margin-top:8px}
+.panel.dark .uc-scroll{border-color:#3A322A}
+/* A table that should scroll sideways but not be cut off vertically. */
+.uc-scroll-x{max-height:none;overflow-x:auto;overflow-y:hidden}
+.uc-code{font-family:var(--font-m);letter-spacing:.06em;word-break:break-all}
+.uc-complexity{font-family:var(--font-m);font-size:13px;color:var(--ink)}
+.panel.dark .uc-complexity{color:var(--mustard)}
+
+/* A saved figure that is negative is a loss, and is coloured as one. */
+.uc-table td[data-grew="yes"]{color:var(--accent-dark);font-weight:700}
+.uc-table td[data-grew="no"]{color:var(--green);font-weight:700}
+
+/* ---------- the algorithm, shown ---------- */
+
+.uc-vis h3{margin-top:0}
+.uc-h4{margin:26px 0 4px;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--mustard)}
+.uc-vis .fine{color:#B9AC9C}
+.uc-vis>table .fine{color:inherit}
+
+.uc-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.uc-chip{font-family:var(--font-m);font-size:11.5px;padding:4px 9px;border-radius:999px;background:#2E2721;border:1px solid #4A4036;color:#FFF9F0}
+.uc-chip b{color:var(--mustard)}
+
+.uc-rounds{margin:12px 0 0;padding-left:20px;font-size:12.5px;line-height:1.7;color:#D9CFC2}
+.uc-rounds li::marker{color:var(--mustard);font-family:var(--font-m);font-weight:700}
+.uc-rounds .fine{color:#8A7F72}
+
+/* ---------- the tree ---------- */
+
+.uc-tree-wrap{margin-top:10px;overflow-x:auto;background:#171310;border:1px solid #3A322A;border-radius:var(--radius-sm);padding:10px}
+.uc-tree{display:block;min-width:100%;height:auto;color:#B9AC9C}
+.uc-tree .uc-node{fill:#4A4036;stroke:#6B5D4C;stroke-width:1}
+.uc-tree .uc-leaf{fill:#2E2721;stroke:var(--mustard);stroke-width:1.5}
+.uc-tree .uc-leaf-label{fill:var(--mustard);font-family:var(--font-m);font-size:9px}
+.uc-tree .uc-bit{fill:#8A7F72;font-family:var(--font-m);font-size:9px}
+
+/* ---------- the photo on the sell form ---------- */
+
+.uc-upload{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--paper)}
+.uc-upload-label{display:block;font-size:13px;font-weight:700;color:var(--ink)}
+.uc-upload input[type=file]{margin-top:8px;font-size:13px;width:100%}
+.uc-upload .fine{margin:8px 0 0;display:block;line-height:1.5}
+.uc-upload-result{margin-top:12px;padding:11px 13px;border-radius:var(--radius-sm);background:var(--green-soft);border:1px solid #BFD9C8;font-size:12.5px;line-height:1.5}
+.uc-upload-result[data-state="bad"]{background:var(--accent-soft);border-color:#F3C3B2;color:var(--accent-dark)}
+.uc-upload-result strong{font-family:var(--font-m)}

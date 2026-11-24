@@ -6,6 +6,7 @@
 // exchange, the landing, and everything the app does afterwards.
 
 import { test, expect } from "@playwright/test";
+import { dismissLocationPrompt } from "./support/location-prompt.js";
 
 const BASE = process.env.BASE_URL || "http://localhost:5173";
 const SB = "https://gzbmqwvybcmxlsgouhyh.supabase.co";
@@ -192,6 +193,7 @@ test("a Google student's campus comes from their address", async ({ page }) => {
   await mockGoogle(page);
   await startGoogleSignIn(page);
   await page.waitForTimeout(3000);
+  await dismissLocationPrompt(page);
 
   // The address decides the campus. A Google account on a college domain
   // lands on that campus — there is no picker to answer, because there is
@@ -209,6 +211,7 @@ test("the campus cannot be set by hand", async ({ page }) => {
   const calls = await mockGoogle(page);
   await startGoogleSignIn(page);
   await page.waitForTimeout(3000);
+  await dismissLocationPrompt(page);
 
   await page.click("#avatarBtn");
   await page.click("#menuCollegeBtn");
@@ -246,6 +249,7 @@ test("the profile menu opens where the student can see it", async ({ page }) => 
   await mockGoogle(page);
   await startGoogleSignIn(page);
   await page.waitForTimeout(3000);
+  await dismissLocationPrompt(page);
 
   await page.click("#avatarBtn");
   const menu = page.locator("#profileMenu");

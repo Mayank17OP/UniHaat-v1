@@ -20,6 +20,8 @@ import { COLLEGES } from "./data.js";
 
 const EARTH_KM = 6371;
 const STORAGE_KEY = "uh-location";
+/** Whether the "where are you" prompt has already been answered. */
+const PROMPT_KEY = "uh-location-prompt";
 const toRad = (deg) => (deg * Math.PI) / 180;
 
 /** Great-circle distance in kilometres between two {lat, lng} points. */
@@ -128,11 +130,50 @@ export function setStoredLocation(loc) {
   return stored;
 }
 
+/**
+ * Remember where the student is.
+ *
+ * The same act as `setStoredLocation`, under the name the rest of the
+ * app uses. Both are exported so neither caller has to be changed.
+ */
+export function saveStoredLocation(loc) {
+  return setStoredLocation(loc);
+}
+
 export function clearStoredLocation() {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    // Clearing the location puts the student back where they started,
+    // so the prompt is allowed to come round again.
+    localStorage.removeItem(PROMPT_KEY);
   } catch {
     /* nothing to clear */
+  }
+}
+
+/* ------------------------------------------------------- the location prompt */
+
+/**
+ * Whether the student has already been asked where they are.
+ *
+ * The prompt appears once. Asking again on every page load is the kind
+ * of thing that makes a student close the tab, so the answer is kept
+ * until they clear their location, which resets it.
+ */
+export function hasLocationPromptBeenHandled() {
+  try {
+    return localStorage.getItem(PROMPT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Remember that the student has been asked. */
+export function markLocationPromptHandled() {
+  try {
+    localStorage.setItem(PROMPT_KEY, "1");
+  } catch {
+    /* storage blocked — the prompt simply comes back next time */
   }
 }
 
