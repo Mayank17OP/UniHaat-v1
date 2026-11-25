@@ -13,7 +13,16 @@
 -- migration pass that would fail in production.
 -- ============================================================================
 
-create extension if not exists pgcrypto;
+-- pgcrypto is not always installed. The schema only needs
+-- gen_random_uuid() from it, and PostgreSQL 13 and later carry that in
+-- the core, so a server without the contrib package still works. The
+-- security suite is the only thing that needs the rest of it.
+do $$
+begin
+  create extension if not exists pgcrypto;
+exception when others then
+  raise notice 'pgcrypto is not installed here — using the built-in gen_random_uuid()';
+end $$;
 
 do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
 do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;

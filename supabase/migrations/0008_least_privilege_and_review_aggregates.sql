@@ -150,11 +150,23 @@ grant execute on function public.staff_update_profile(uuid, jsonb) to service_ro
 -- Every one of these writes was already blocked by a row policy. Taking
 -- the privilege away as well means that a mistake in a policy cannot
 -- turn into a write.
-revoke insert, update, delete, maintain
-  on public.categories, public.colleges, public.conversations, public.demand_matches,
-     public.demands, public.listing_images, public.listings, public.messages,
-     public.reports, public.reviews, public.transactions, public.wishlists
-  from anon;
+do $$
+declare
+  privs text := 'insert, update, delete';
+begin
+  -- `maintain` arrived in PostgreSQL 17. An older server has nothing to
+  -- take away under that name, and naming it there would only fail.
+  if current_setting('server_version_num')::int >= 170000 then
+    privs := privs || ', maintain';
+  end if;
+  execute format(
+    'revoke %s on public.categories, public.colleges, public.conversations,'
+    ' public.demand_matches, public.demands, public.listing_images,'
+    ' public.listings, public.messages, public.reports, public.reviews,'
+    ' public.transactions, public.wishlists from anon',
+    privs
+  );
+end $$;
 
 -- The match table is written by the server's trigger alone.
 revoke insert, update, delete on public.demand_matches from authenticated;

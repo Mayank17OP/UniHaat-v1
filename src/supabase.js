@@ -280,7 +280,7 @@ export async function claimVerification({ college, studentId } = {}) {
 
 /* ---------------------------------------------------------------- listings */
 
-export async function fetchListings({ category, type, search } = {}) {
+export async function fetchListings({ category, type, search, includeArchived = false } = {}) {
   const supa = getClient();
   if (!supa) return null;
   let query = supa
@@ -290,8 +290,13 @@ export async function fetchListings({ category, type, search } = {}) {
     // `profiles` through the same pair of tables — so it has to be spelled
     // out, or the whole query fails with PGRST201.
     .select("*, listing_images(url, alt, sort, codec), profiles!listings_seller_id_fkey(id, full_name, avatar_url, rating_sum, rating_count, deals_completed, verified, colleges(short_name))")
-    .eq("status", "active")
     .order("created_at", { ascending: false });
+
+  // Row level security already hides other people's taken-down listings,
+  // so asking for them as well costs nothing and saves a second trip.
+  query = includeArchived
+    ? query.in("status", ["active", "archived"])
+    : query.eq("status", "active");
 
   if (category && category !== "all") query = query.eq("category_slug", category);
   if (type && type !== "all") query = query.eq("listing_type", type);
@@ -737,4 +742,123 @@ export function subscribeToMessages(conversationId, onMessage) {
   return () => {
     supa.removeChannel(channel);
   };
+}
+
+/**
+ * Watch every message the student is allowed to see.
+ *
+ * Row level security does the filtering: the stream only carries
+ * messages from conversations the student is part of, so subscribing
+ * to the whole table leaks nothing.
+ */
+export function subscribeToNewMessages(onMessage) {
+  const supa = getClient();
+  if (!supa) return () => {};
+  const channel = supa
+    .channel("chat:inbox")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "messages" },
+      (payload) => {
+        if (payload?.new) onMessage(payload.new);
+      },
+    )
+    .subscribe();
+  return () => {
+    supa.removeChannel(channel);
+  };
+}
+
+/**
+ * The inbox: every conversation the student is part of.
+ *
+ * The database does the joining — the other party, the item, the last
+ * message and the unread count come back in one row per conversation,
+ * so the browser never has to stitch three tables together.
+ */
+export async function fetchConversationInbox() {
+  const supa = getClient();
+  if (!supa || !isSignedIn()) return [];
+  const { data, error } = await supa.rpc("conversation_inbox");
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Mark the other side's messages as read. Returns how many were marked. */
+export async function markConversationRead(conversationId) {
+  const supa = getClient();
+  if (!supa || !conversationId) return 0;
+  const { data, error } = await supa.rpc("mark_conversation_read", {
+    p_conversation: conversationId,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+/**
+ * Withdraw a listing.
+ *
+ * The listing is archived rather than deleted: a completed SafeSwap
+ * handover still points at it, and a row that vanishes takes its
+ * history with it. Row level security only lets a student archive their
+ * own listing, so this cannot be used on anybody else's.
+ */
+export async function archiveListing(listingId) {
+  const supa = getClient();
+  if (!supa || !listingId) return null;
+  const { data, error } = await supa
+    .from("listings")
+    .update({ status: "archived" })
+    .eq("id", listingId)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Bring an archived listing back to the marketplace.
+ *
+ * The seller owns the row, and only the seller may do this — the policy
+ * on the table allows an update only when the row belongs to the
+ * student making it.
+ */
+export async function restoreListing(listingId) {
+  const supa = getClient();
+  if (!supa || !listingId) return null;
+  const { data, error } = await supa
+    .from("listings")
+    .update({ status: "active" })
+    .eq("id", listingId)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * The seller's archived listings, taken from a listing fetch that
+ * already asked for them.
+ *
+ * Asking the database twice for the same rows is a waste of a round
+ * trip, and the marketplace sync is already fetching the rows.
+ */
+export function archivedFromRows(rows) {
+  return (rows || [])
+    .filter((row) => row.status === "archived")
+    .map((row) => ({ id: row.id, title: row.title, price: Number(row.price ?? 0) }));
+}
+
+/** Mark a listing as sold, so it leaves the marketplace as a deal. */
+export async function markListingSold(listingId) {
+  const supa = getClient();
+  if (!supa || !listingId) return null;
+  const { data, error } = await supa
+    .from("listings")
+    .update({ status: "sold" })
+    .eq("id", listingId)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }

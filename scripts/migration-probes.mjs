@@ -286,6 +286,140 @@ const probes = [
       return failures;
     },
   },
+  {
+    migration: "0017",
+    name: "a conversation knows when it was last spoken in",
+    async check(client) {
+      const { rows } = await client.query(`
+        select column_name, data_type
+          from information_schema.columns
+         where table_schema = 'public' and table_name = 'conversations'
+           and column_name = 'last_message_at'
+      `);
+      if (!rows.length) return ["conversations has no last_message_at"];
+      if (rows[0].data_type !== "timestamp with time zone") {
+        return [`last_message_at is a ${rows[0].data_type}`];
+      }
+      return [];
+    },
+  },
+  {
+    migration: "0017",
+    name: "the inbox shows a student their own conversations and nobody else's",
+    async check(client) {
+      // Alpha sells, Beta buys, Gamma is nobody's business. The rows are
+      // made inside one transaction so the database is left as it was.
+      const failures = [];
+      await client.query("begin");
+      try {
+        const { rows: listingRows } = await client.query(`
+          select id from public.listings
+           where seller_id = 'aaaaaaaa-0000-4000-8000-000000000001'
+           order by created_at desc limit 1
+        `);
+        const listingId = listingRows[0]?.id ?? null;
+
+        await client.query(
+          `insert into public.conversations (listing_id, buyer_id, seller_id)
+             values ($1, 'bbbbbbbb-0000-4000-8000-000000000002',
+                           'aaaaaaaa-0000-4000-8000-000000000001')`,
+          [listingId]
+        );
+        await client.query(
+          `insert into public.messages (conversation_id, sender_id, body)
+           select id, 'aaaaaaaa-0000-4000-8000-000000000001', 'Is the cycle still there?'
+             from public.conversations
+            where buyer_id = 'bbbbbbbb-0000-4000-8000-000000000002'
+              and seller_id = 'aaaaaaaa-0000-4000-8000-000000000001'
+            order by created_at desc limit 1`
+        );
+
+        // Beta sees the conversation, with the other party and the message.
+        await client.query("set local role authenticated");
+        await client.query("set local request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002'");
+        const { rows: beta } = await client.query("select * from public.conversation_inbox()");
+        await client.query("reset role");
+
+        if (!beta.length) failures.push("the buyer sees no conversation in the inbox");
+        else {
+          if (beta[0].other_name !== "Alpha") failures.push(`the inbox names ${beta[0].other_name} as the other party`);
+          if (!beta[0].last_body) failures.push("the inbox has no last message");
+          if (Number(beta[0].unread) !== 1) failures.push(`the inbox counts ${beta[0].unread} unread, expected 1`);
+        }
+
+        // Gamma is in neither conversation and sees nothing.
+        await client.query("set local role authenticated");
+        await client.query("set local request.jwt.claim.sub = 'cccccccc-0000-4000-8000-000000000003'");
+        const { rows: gamma } = await client.query("select * from public.conversation_inbox()");
+        await client.query("reset role");
+        if (gamma.length) failures.push("an unrelated student sees a conversation in the inbox");
+      } finally {
+        await client.query("rollback");
+      }
+      return failures;
+    },
+  },
+  {
+    migration: "0017",
+    name: "reading a conversation clears its unread count",
+    async check(client) {
+      const failures = [];
+      await client.query("begin");
+      try {
+        const { rows: listingRows } = await client.query(`
+          select id from public.listings
+           where seller_id = 'aaaaaaaa-0000-4000-8000-000000000001'
+           order by created_at desc limit 1
+        `);
+        await client.query(
+          `insert into public.conversations (listing_id, buyer_id, seller_id)
+             values ($1, 'bbbbbbbb-0000-4000-8000-000000000002',
+                           'aaaaaaaa-0000-4000-8000-000000000001')`,
+          [listingRows[0]?.id ?? null]
+        );
+        await client.query(
+          `insert into public.messages (conversation_id, sender_id, body)
+           select id, 'aaaaaaaa-0000-4000-8000-000000000001', 'Still there?'
+             from public.conversations
+            where buyer_id = 'bbbbbbbb-0000-4000-8000-000000000002'
+              and seller_id = 'aaaaaaaa-0000-4000-8000-000000000001'
+            order by created_at desc limit 1`
+        );
+
+        await client.query("set local role authenticated");
+        await client.query("set local request.jwt.claim.sub = 'bbbbbbbb-0000-4000-8000-000000000002'");
+        const { rows: before } = await client.query("select unread from public.conversation_inbox()");
+        if (Number(before[0]?.unread) !== 1) failures.push(`the inbox counts ${before[0]?.unread} unread before reading`);
+
+        await client.query("select public.mark_conversation_read(id) from public.conversations");
+        const { rows: after } = await client.query("select unread from public.conversation_inbox()");
+        await client.query("reset role");
+
+        if (Number(after[0]?.unread) !== 0) failures.push(`the inbox still counts ${after[0]?.unread} unread after reading`);
+      } finally {
+        await client.query("rollback");
+      }
+      return failures;
+    },
+  },
+  {
+    migration: "0017",
+    name: "the live stream carries new messages",
+    async check(client) {
+      // Without the message table in the realtime publication the chat
+      // subscribes to a stream that never carries anything, and the
+      // reply arrives days later — if it arrives at all.
+      const { rows } = await client.query(`
+        select count(*)::int as n
+          from pg_publication_tables
+         where pubname = 'supabase_realtime'
+           and schemaname = 'public'
+           and tablename = 'messages'
+      `);
+      if (!rows[0].n) return ["the realtime publication does not carry messages"];
+      return [];
+    },
+  },
 ];
 
 /**
@@ -395,6 +529,7 @@ async function checkMigrationEarnsItsPlace() {
     "0007_transaction_terminal_state.sql",
     "0012_unireserve.sql",
     "0016_unicompress.sql",
+    "0017_chat_conversations.sql",
   ];
 
   console.log("\neach migration earns its place");
