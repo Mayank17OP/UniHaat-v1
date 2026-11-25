@@ -24,6 +24,7 @@ import {
   hydrateCompressedImages,
 } from "./unicompress.js";
 import { initUniMail, triggerUniMailNotification } from "./unimail.js";
+import { initNav, closeMobileMenu } from "./nav.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -797,13 +798,8 @@ $("#swapNewBtn").addEventListener("click", newSwapCode);
 
 /* ---------- Misc ---------- */
 $("#impactShare").addEventListener("click", () => toast("UniImpact card shared — ₹4,250 saved · 11 kg diverted"));
-$("#menuBtn").addEventListener("click", () => {
-  const m = $("#mobileMenu"); m.classList.toggle("open");
-  $("#menuBtn").setAttribute("aria-expanded", m.classList.contains("open"));
-});
-$$("#mobileMenu a").forEach((a) => a.addEventListener("click", () => $("#mobileMenu").classList.remove("open")));
-$("#mSellBtn").addEventListener("click", () => { $("#mobileMenu").classList.remove("open"); openOverlay("#sellOverlay"); });
-$("#mVerifyBtn").addEventListener("click", () => { $("#mobileMenu").classList.remove("open"); openOverlay("#verifyOverlay"); });
+$("#mSellBtn").addEventListener("click", () => { closeMobileMenu(); openOverlay("#sellOverlay"); });
+$("#mVerifyBtn").addEventListener("click", () => { closeMobileMenu(); openOverlay("#verifyOverlay"); });
 
 /* ---------- Location discovery ---------- */
 function populateLocationPicker() {
@@ -951,7 +947,7 @@ $("#profileLocationToggle")?.addEventListener("click", () => {
   }
 });
 $("#mLocationBtn")?.addEventListener("click", () => {
-  $("#mobileMenu")?.classList.remove("open");
+  closeMobileMenu();
   onLocationTrigger();
 });
 $("#locationChip")?.addEventListener("click", onLocationTrigger);
@@ -1008,6 +1004,7 @@ initUniMail({ toast });
 initScrollProgress();
 initMagnetic();
 initTypeReveal("[data-reveal-type]");
+initNav();
 
 /* ---------- Auth + sync ---------- */
 initAuthUI({
