@@ -256,12 +256,12 @@ async function mockSupabase(page, options = {}) {
   return calls;
 }
 
-async function signIn(page) {
+async function signIn(page, email = "sana.kapoor@dtu.ac.in") {
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(900);
   await page.click("#signInBtn");
   await page.waitForTimeout(250);
-  await page.fill('#authForm [name="email"]', "sana.kapoor@dtu.ac.in");
+  await page.fill('#authForm [name="email"]', email);
   await page.fill('#authForm [name="password"]', "campus-secret-1");
   await page.click("#authSubmit");
   await page.waitForTimeout(1600);
@@ -272,6 +272,248 @@ async function signIn(page) {
     await skip.click();
     await page.waitForTimeout(400);
   }
+}
+
+/* ------------------------------------------------- a seller replies for real */
+
+/**
+ * The shared mock the two halves of a conversation talk through.
+ *
+ * Both the seller and the customer write to the same store and listen
+ * to the same realtime stream, so a reply really is written once and
+ * really is delivered to the other side.
+ */
+function createChatBackend() {
+  return {
+    // The customer has already asked about the table.
+    messages: [{
+      id: "eeee1111-0000-0000-0000-000000000001",
+      conversation_id: CONVERSATION_ID,
+      sender_id: BUYER_ID,
+      body: "Is the table still available?",
+      read_at: null,
+      created_at: new Date(Date.now() - 60_000).toISOString(),
+    }],
+    sent: [],
+    sockets: new Set(),
+    /** Hand a message row to every page listening on the stream. */
+    deliver(row) {
+      for (const socket of this.sockets) socket(row);
+    },
+  };
+}
+
+const MESSAGE_COLUMNS = [
+  { name: "id", type: "uuid" },
+  { name: "conversation_id", type: "uuid" },
+  { name: "sender_id", type: "uuid" },
+  { name: "body", type: "text" },
+  { name: "read_at", type: "timestamptz" },
+  { name: "created_at", type: "timestamptz" },
+];
+
+// A second thread, so the suite can prove a reply follows the thread
+// on screen rather than the one that happened to be opened first.
+const SECOND_CONVERSATION_ID = "dddd1111-0000-0000-0000-000000000002";
+const SECOND_LISTING_ID = "aaaa1111-0000-0000-0000-000000000002";
+const STRANGER_ID = "bbbb2222-0000-0000-0000-000000000002";
+
+/**
+ * Point one page at the shared backend.
+ *
+ * `owner` decides who is signed in. The database is mocked at the
+ * network boundary and the real vendored Supabase client drives the
+ * request, so the page runs the same code the browser runs.
+ */
+async function mockChatPage(page, backend, owner = "buyer") {
+  const isSeller = owner === "seller";
+  const me = isSeller ? sellerProfile : buyerProfile;
+  const them = isSeller ? buyerProfile : sellerProfile;
+  const user = isSeller
+    ? { ...session, user: { ...session.user, id: SELLER_ID, email: "aarav.sharma@dtu.ac.in", user_metadata: { name: "Aarav Sharma", full_name: "Aarav Sharma" } } }
+    : session;
+
+  const myRows = [
+    {
+      id: CONVERSATION_ID,
+      listing_id: LISTING_ID,
+      listing_title: "Study Table + Chair Combo",
+      listing_price: 2499,
+      other_id: them.id,
+      other_name: them.full_name,
+      last_body: "Is the table still available?",
+      last_at: new Date(Date.now() - 60_000).toISOString(),
+      unread: 1,
+    },
+  ];
+  if (isSeller) {
+    // Aarav is selling to more than one student, so his inbox has a
+    // second thread with somebody else entirely.
+    myRows.push({
+      id: SECOND_CONVERSATION_ID,
+      listing_id: SECOND_LISTING_ID,
+      listing_title: "Old Study Lamp",
+      listing_price: 450,
+      other_id: STRANGER_ID,
+      other_name: "Kabir Mehta",
+      last_body: "Does the lamp still work?",
+      last_at: new Date(Date.now() - 600_000).toISOString(),
+      unread: 0,
+    });
+  }
+
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+    const p = url.pathname;
+
+    if (!url.hostname.endsWith("supabase.co")) {
+      await route.fallback();
+      return;
+    }
+
+    if (p === "/auth/v1/token") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(user) });
+      return;
+    }
+    if (p === "/auth/v1/user") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(user.user) });
+      return;
+    }
+    if (p === "/auth/v1/logout") {
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
+
+    if (p.startsWith("/rest/v1/")) {
+      const body = route.request().postData();
+
+      if (p.startsWith("/rest/v1/rpc/conversation_inbox")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(myRows) });
+        return;
+      }
+      if (p.startsWith("/rest/v1/rpc/mark_conversation_read")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: "1" });
+        return;
+      }
+      if (p.startsWith("/rest/v1/messages")) {
+        if (route.request().method() === "POST") {
+          const written = JSON.parse(body || "{}");
+          backend.sent.push(written);
+          const row = {
+            id: `eeee2222-0000-0000-0000-${String(backend.messages.length + 2).padStart(12, "0")}`,
+            conversation_id: written.conversation_id,
+            sender_id: user.user.id,
+            body: written.body,
+            read_at: null,
+            created_at: new Date().toISOString(),
+          };
+          backend.messages.push(row);
+          await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(row) });
+          // The database tells everyone who is allowed to see it.
+          backend.deliver(row);
+          return;
+        }
+        const wanted = url.searchParams.get("conversation_id") || "";
+        const rows = backend.messages.filter((m) => !wanted || wanted.includes(m.conversation_id));
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
+        return;
+      }
+      if (p.startsWith("/rest/v1/profiles")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([me]) });
+        return;
+      }
+      if (p.startsWith("/rest/v1/listings")) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([liveListing]) });
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+      return;
+    }
+
+    if (p.startsWith("/realtime/v1/")) {
+      await route.abort();
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  /* The realtime stream.
+   *
+   * The vendored Supabase client speaks the Phoenix protocol over a
+   * WebSocket. The server hands out an id for every database
+   * subscription and stamps that id on every change it pushes, so the
+   * mock does the same.
+   */
+  await page.routeWebSocket(/\/realtime\/v1\/websocket.*/, (ws) => {
+    const joined = [];
+
+    ws.onMessage((raw) => {
+      let parsed;
+      try { parsed = JSON.parse(String(raw)); } catch { return; }
+      const frames = (Array.isArray(parsed) && parsed.length === 5 && typeof parsed[0] === "string") ? [parsed] : parsed;
+
+      for (const frame of frames) {
+        if (!Array.isArray(frame)) continue;
+        const [joinRef, ref, topic, event] = frame;
+        if (event === "phx_join") {
+          const filters = frame[4]?.config?.postgres_changes || [];
+          const assigned = filters.map((f, i) => ({
+            id: `bbbb3333-0000-4000-8000-${String(i).padStart(12, "0")}`,
+            event: f.event,
+            schema: f.schema,
+            table: f.table,
+            filter: f.filter ?? null,
+          }));
+          joined.push({ topic, joinRef, ids: assigned.map((a) => a.id), filter: filters[0]?.filter });
+          ws.send(JSON.stringify([joinRef, ref, topic, "phx_reply", {
+            status: "ok",
+            response: { postgres_changes: assigned },
+          }]));
+        }
+        if (event === "heartbeat") {
+          ws.send(JSON.stringify([null, ref, "phoenix", "phx_reply", { status: "ok", response: {} }]));
+        }
+      }
+    });
+
+    backend.sockets.add((row) => {
+      for (const channel of joined) {
+        // The inbox channel carries every message the student may see;
+        // a thread channel only carries its own conversation.
+        const isInbox = channel.topic === "realtime:chat:inbox";
+        const isThread = channel.topic === `realtime:chat:${row.conversation_id}`;
+        if (!isInbox && !isThread) continue;
+        if (!channel.ids.length) continue;
+        ws.send(JSON.stringify([channel.joinRef, null, channel.topic, "postgres_changes", {
+          data: {
+            schema: "public",
+            table: "messages",
+            type: "INSERT",
+            record: row,
+            old_record: {},
+            columns: MESSAGE_COLUMNS,
+            commit_timestamp: new Date().toISOString(),
+          },
+          ids: channel.ids,
+        }]));
+      }
+    });
+
+    ws.onClose(() => {
+      // The socket is dropped when the page goes away; the delivery
+      // callback checks that before writing.
+    });
+  });
+}
+
+/** Open a conversation from the inbox and wait for the thread. */
+async function openInboxThread(page, convId) {
+  await page.click("#chatBtn");
+  await page.waitForTimeout(900);
+  await page.locator(`#chatList .chat-row[data-conv="${convId}"]`).first().click();
+  await page.waitForSelector("#chatDrawer:not([hidden])");
+  await page.waitForTimeout(700);
 }
 
 /* ------------------------------------------------------------- the chat button */
@@ -390,6 +632,123 @@ test("the seller's side of a conversation is separate from the buyer's", async (
   // asks the database for the caller's own rows only.
   const inboxCall = buyerCalls.rest.find((c) => c.path.startsWith("/rest/v1/rpc/conversation_inbox"));
   expect(inboxCall).toBeTruthy();
+});
+
+/* ------------------------------------------ the seller replies from the inbox */
+
+test("a seller's reply from the chat inbox reaches the customer", async ({ browser }) => {
+  const backend = createChatBackend();
+
+  // Two students, two browsers, one conversation.
+  const customerContext = await browser.newContext();
+  const sellerContext = await browser.newContext();
+  const customer = await customerContext.newPage();
+  const seller = await sellerContext.newPage();
+  await mockChatPage(customer, backend, "buyer");
+  await mockChatPage(seller, backend, "seller");
+
+  // The customer opens the thread and waits for the answer.
+  await signIn(customer);
+  await openInboxThread(customer, CONVERSATION_ID);
+  await expect(customer.locator("#chatBody")).toContainText("Is the table still available?");
+
+  // The seller opens the same thread from the chat inbox — the only way
+  // a seller has into a conversation — and answers.
+  await signIn(seller, "aarav.sharma@dtu.ac.in");
+  await openInboxThread(seller, CONVERSATION_ID);
+  await seller.fill("#chatInput", "Yes, it is still available.");
+  await seller.click('#chatForm button[type="submit"]');
+  await seller.waitForTimeout(900);
+
+  // The answer is written to the shared conversation, not kept in the
+  // seller's browser.
+  expect(backend.sent.length).toBe(1);
+  expect(backend.sent[0].conversation_id).toBe(CONVERSATION_ID);
+  expect(backend.sent[0].body).toBe("Yes, it is still available.");
+  const local = await seller.evaluate(() => localStorage.getItem("uh-chat-messages"));
+  expect(local).toBeFalsy();
+
+  // The customer receives it, live, in the open thread.
+  await expect(customer.locator("#chatBody")).toContainText("Yes, it is still available.", { timeout: 8000 });
+
+  // Exactly once: the live stream and the optimistic send agree.
+  await expect(customer.locator('#chatBody .msg:has-text("Yes, it is still available.")')).toHaveCount(1);
+  await expect(customer.locator("#chatBody .msg").last()).toHaveClass(/them/);
+
+  await customerContext.close();
+  await sellerContext.close();
+});
+
+test("a seller's reply is never left in the seller's own browser", async ({ browser }) => {
+  const backend = createChatBackend();
+  const sellerContext = await browser.newContext();
+  const seller = await sellerContext.newPage();
+  await mockChatPage(seller, backend, "seller");
+
+  await signIn(seller, "aarav.sharma@dtu.ac.in");
+  await openInboxThread(seller, CONVERSATION_ID);
+
+  // The local storage thread key is the one the offline demo uses.
+  // A live conversation must never be written there, because nothing
+  // there ever reaches the customer.
+  const before = await seller.evaluate(() => Object.keys(localStorage));
+  await seller.fill("#chatInput", "I can hold it until Saturday.");
+  await seller.click('#chatForm button[type="submit"]');
+  await seller.waitForTimeout(900);
+
+  expect(backend.sent.length).toBe(1);
+  expect(backend.sent[0].conversation_id).toBe(CONVERSATION_ID);
+
+  const stored = await seller.evaluate(() => localStorage.getItem("uh-chat-messages"));
+  expect(stored).toBeFalsy();
+  const after = await seller.evaluate(() => Object.keys(localStorage));
+  expect(after.length).toBe(before.length);
+
+  await sellerContext.close();
+});
+
+test("a reply always goes to the thread that is on screen", async ({ browser }) => {
+  const backend = createChatBackend();
+  const sellerContext = await browser.newContext();
+  const seller = await sellerContext.newPage();
+  await mockChatPage(seller, backend, "seller");
+
+  await signIn(seller, "aarav.sharma@dtu.ac.in");
+  await openInboxThread(seller, CONVERSATION_ID);
+
+  // Aarav moves to the other thread in his inbox.
+  await seller.locator(`#chatList .chat-row[data-conv="${SECOND_CONVERSATION_ID}"]`).first().click();
+  await seller.waitForTimeout(800);
+  await expect(seller.locator("#chatTitle")).toContainText("Old Study Lamp");
+
+  await seller.fill("#chatInput", "The lamp works fine.");
+  await seller.click('#chatForm button[type="submit"]');
+  await seller.waitForTimeout(900);
+
+  // The answer belongs to the lamp thread, not to the one opened first.
+  expect(backend.sent.length).toBe(1);
+  expect(backend.sent[0].conversation_id).toBe(SECOND_CONVERSATION_ID);
+  expect(backend.sent[0].body).toBe("The lamp works fine.");
+
+  await sellerContext.close();
+});
+
+test("a seller cannot post into somebody else's thread", async ({ browser }) => {
+  const backend = createChatBackend();
+  const sellerContext = await browser.newContext();
+  const seller = await sellerContext.newPage();
+  await mockChatPage(seller, backend, "seller");
+
+  await signIn(seller, "aarav.sharma@dtu.ac.in");
+  await openInboxThread(seller, CONVERSATION_ID);
+
+  // The stranger's thread is not in Aarav's inbox, so there is nothing
+  // on screen to answer.
+  await expect(seller.locator(`#chatList .chat-row[data-conv="${SECOND_CONVERSATION_ID}"]`)).toHaveCount(1);
+  const rows = await seller.locator("#chatList .chat-row").evaluateAll((els) => els.map((e) => e.dataset.conv));
+  expect(rows).toEqual([CONVERSATION_ID, SECOND_CONVERSATION_ID]);
+
+  await sellerContext.close();
 });
 
 /* ------------------------------------------------------------- the wishlist */

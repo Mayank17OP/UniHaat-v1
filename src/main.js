@@ -576,7 +576,7 @@ document.addEventListener("keydown", (e) => {
   // leave whatever it was opened from alone.
   if (!$("#confirmOverlay").hidden) return;
   closeOverlays();
-  $("#chatDrawer").hidden = true;
+  closeChatDrawer();
   $("#wishlistDrawer").hidden = true;
 });
 
@@ -623,6 +623,16 @@ function confirmAction(title, body, yesLabel = "Confirm") {
 /* ---------- Real-Time User-to-User Chat ---------- */
 let chatProduct = null;
 let activeConversationId = null;
+/**
+ * Which kind of thread the drawer is showing.
+ *
+ * "live" means a real database conversation, "local" means the offline
+ * demo thread that only lives in this browser. The mode decides where a
+ * reply is delivered: a thread opened from the inbox is always live, so
+ * a seller's answer goes into the shared conversation and reaches the
+ * customer instead of vanishing into local storage.
+ */
+let chatThreadMode = "local";
 let unsubscribeChat = null;
 const chatChannel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("unihaat-chat") : null;
 
@@ -677,6 +687,10 @@ if (chatChannel) {
   chatChannel.onmessage = (ev) => {
     const { threadKey, msg } = ev.data || {};
     if (!threadKey || !msg || !chatProduct) return;
+    // The broadcast channel carries the offline demo thread only. A
+    // live thread is fed by the database stream, and repainting it
+    // from local storage would wipe the real history off the screen.
+    if (chatThreadMode !== "local") return;
     if (threadKey === activeConversationId) {
       appendLocalMessage(threadKey, msg);
       renderChatMessages(readLocalMessages(threadKey), null);
@@ -686,6 +700,12 @@ if (chatChannel) {
 
 async function openChat(p) {
   chatProduct = p;
+  // Drop the previous thread straight away. The conversation id below
+  // only arrives after a network round trip, and a reply written while
+  // that is in flight must not be sent to the thread that happened to
+  // be open before.
+  activeConversationId = null;
+  chatThreadMode = "local";
   if (unsubscribeChat) {
     unsubscribeChat();
     unsubscribeChat = null;
@@ -703,6 +723,7 @@ async function openChat(p) {
         sellerId: p.sellerId,
       });
       activeConversationId = conv.id;
+      chatThreadMode = "live";
       const history = await SB.fetchMessages(conv.id);
       renderChatMessages(history, myId);
       unsubscribeChat = SB.subscribeToMessages(conv.id, (newMsg) => {
@@ -721,12 +742,25 @@ async function openChat(p) {
 }
 
 $("#chatClose").addEventListener("click", () => {
+  closeChatDrawer();
+});
+
+/**
+ * Put the chat drawer away.
+ *
+ * Nothing is on screen any more, so no thread is active. Clearing the
+ * conversation stops a later reply from being routed into a thread the
+ * student is no longer looking at.
+ */
+function closeChatDrawer() {
   $("#chatDrawer").hidden = true;
+  activeConversationId = null;
+  chatThreadMode = "local";
   if (unsubscribeChat) {
     unsubscribeChat();
     unsubscribeChat = null;
   }
-});
+}
 
 /**
  * Put one message into the open thread.
@@ -750,7 +784,13 @@ async function sendChat(text) {
   if (!clean || !chatProduct) return;
   const myId = SB.currentUserId();
 
-  if (signedIn && myId && activeConversationId && !String(activeConversationId).startsWith("conv:")) {
+  // A live thread is the only one that reaches the other student. The
+  // drawer says which kind of thread it is showing, so a reply typed
+  // into an inbox conversation is posted to the shared database row
+  // rather than parked in this browser's local storage.
+  const liveThread = chatThreadMode === "live" && activeConversationId;
+
+  if (signedIn && myId && liveThread) {
     try {
       const sent = await SB.sendMessage({ conversationId: activeConversationId, body: clean });
       triggerUniMailNotification("product_enquiry", { item: chatProduct.title, sender: "A verified student" });
@@ -764,6 +804,13 @@ async function sendChat(text) {
       toast("Could not send message: " + (err?.message || "network error"));
       return;
     }
+  }
+
+  // There is no thread to send into yet — it is still being opened.
+  // Stashing the message under an empty key would lose it quietly.
+  if (!activeConversationId) {
+    toast("That conversation is still opening. Try again in a moment.");
+    return;
   }
 
   const msg = {
@@ -886,6 +933,16 @@ async function openConversation(conversationId) {
     college: "",
   };
   if (unsubscribeChat) { unsubscribeChat(); unsubscribeChat = null; }
+
+  // Claim the thread before anything else happens. The conversation on
+  // screen is the conversation a reply belongs to, and this is the only
+  // route a seller has into a thread, so the id has to be in place
+  // before the history is fetched. Setting it here also means a reply
+  // written while the messages are still loading goes to the shared
+  // database conversation — where the customer will see it — instead of
+  // falling back to a local copy that never leaves this browser.
+  activeConversationId = conversationId;
+  chatThreadMode = "live";
 
   $("#chatTitle").textContent = row.listing_title || row.other_name || "Chat";
   $("#chatSub").textContent = `${row.other_name || "Student"} · Direct chat`;
