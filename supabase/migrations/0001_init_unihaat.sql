@@ -7,7 +7,16 @@
 -- Applied via: supabase create_migration (see scripts/README for the CLI path)
 -- ============================================================================
 
-create extension if not exists pgcrypto;
+-- pgcrypto is worth having, but it is not worth failing over: the only
+-- thing the schema needs from it is gen_random_uuid(), and PostgreSQL
+-- 13 and later carry that in the core. A server without the contrib
+-- package still gets a working schema.
+do $$
+begin
+  create extension if not exists pgcrypto;
+exception when others then
+  raise notice 'pgcrypto is not installed here — using the built-in gen_random_uuid()';
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- Enumerated types

@@ -33,6 +33,8 @@ const fmt = (n) => "₹" + Number(n).toLocaleString("en-IN");
 let products = [...PRODUCTS];
 let demands = [...DEMANDS];
 let wishlist = new Set(JSON.parse(localStorage.getItem("uh-wishlist") || "[]"));
+/** The seller's own listings that were taken off the marketplace. */
+let archivedListings = [];
 let state = { q: "", type: "all", cat: "all", college: "all", scope: "all", sort: "distance", radius: "all" };
 let userLocation = getStoredLocation();
 let verified = localStorage.getItem("uh-verified") === "1";
@@ -263,13 +265,77 @@ $("#productGrid").addEventListener("click", (e) => {
 $("#productGrid").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { const c = e.target.closest(".card"); if (c) openProduct(c.dataset.id); }
 });
-$("#wishlistBtn").addEventListener("click", () => {
-  if (!wishlist.size) return toast("Your wishlist is empty — tap the heart on any listing");
-  state.q = ""; $("#searchInput").value = "";
+$("#wishlistBtn").addEventListener("click", () => openWishlist());
+$("#wishlistClose").addEventListener("click", () => { $("#wishlistDrawer").hidden = true; });
+
+/**
+ * The wishlist window.
+ *
+ * The heart on a card saves an item; this is where the student actually
+ * looks at what they saved — with the price, the seller, and a way to
+ * throw something out again.
+ */
+function openWishlist() {
+  renderWishlist();
+  $("#wishlistDrawer").hidden = false;
+}
+
+function renderWishlist() {
+  const body = $("#wishlistBody");
   const items = products.filter((p) => wishlist.has(p.id));
-  toast(`Wishlist: ${items.map((p) => p.title.split(" ").slice(0, 2).join(" ")).join(", ")}`);
-  $("#marketplace").scrollIntoView({ behavior: "smooth" });
-});
+  const missing = [...wishlist].filter((id) => !products.some((p) => p.id === id));
+
+  if (!items.length && !missing.length) {
+    body.innerHTML = `<div class="drawer-empty">
+      <h3>Nothing saved yet</h3>
+      <p>Tap the heart on any listing and it lands here, ready to compare later.</p>
+      <button class="btn btn-primary" id="wishlistBrowse">Browse the marketplace</button>
+    </div>`;
+    $("#wishlistBrowse").addEventListener("click", () => {
+      $("#wishlistDrawer").hidden = true;
+      $("#marketplace").scrollIntoView({ behavior: "smooth" });
+    });
+    return;
+  }
+
+  body.innerHTML = `
+    ${items.length ? `<div class="wishlist-items">${items.map((p) => `
+      <article class="wishlist-item" data-id="${p.id}">
+        <img class="wishlist-thumb" src="${p.img}" alt="" loading="lazy" onerror="this.style.opacity=.15" />
+        <div class="wishlist-info">
+          <strong>${escHtml(p.title)}</strong>
+          <p class="fine">${escHtml(p.seller)} · ${escHtml(p.college)}</p>
+          <span class="price">${priceLabel(p)}</span>
+        </div>
+        <div class="wishlist-actions">
+          <button class="btn btn-ghost btn-sm" data-wish-open="${p.id}">View</button>
+          <button class="btn btn-ghost btn-sm btn-danger-ghost" data-wish-remove="${p.id}" aria-label="Remove ${escHtml(p.title)} from wishlist">Remove</button>
+        </div>
+      </article>`).join("")}</div>` : ""}
+    ${missing.length ? `<p class="fine wishlist-missing">${missing.length} saved item${missing.length > 1 ? "s are" : " is"} no longer on the marketplace. <button class="link-btn" id="wishlistPrune">Clear ${missing.length > 1 ? "them" : "it"}</button></p>` : ""}
+    ${items.length ? `<p class="fine wishlist-foot">${items.length} item${items.length > 1 ? "s" : ""} saved on this device.</p>` : ""}
+  `;
+
+  $$("[data-wish-open]", body).forEach((b) => b.addEventListener("click", () => {
+    $("#wishlistDrawer").hidden = true;
+    openProduct(b.dataset.wishOpen);
+  }));
+  $$("[data-wish-remove]", body).forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.wishRemove;
+    wishlist.delete(id);
+    updateWishlistCount();
+    renderWishlist();
+    if (signedIn) persistWishlist(id, false);
+    toast("Removed from wishlist");
+  }));
+  $("#wishlistPrune")?.addEventListener("click", () => {
+    missing.forEach((id) => { if (signedIn) persistWishlist(id, false); });
+    missing.forEach((id) => wishlist.delete(id));
+    updateWishlistCount();
+    renderWishlist();
+    toast("Cleared items that are no longer available");
+  });
+}
 
 /* ---------- Product detail modal + Passport + SafeSwap QR ---------- */
 function drawQR(canvas, seedStr) {
@@ -288,50 +354,201 @@ function drawQR(canvas, seedStr) {
 function openProduct(id) {
   const p = products.find((x) => x.id === id); if (!p) return;
   const v = verdict(p);
+  const mine = isMyListing(p);
   const code = "UH-" + p.id.toUpperCase() + "-" + Math.floor(1000 + Math.random() * 9000);
   $("#modalBody").innerHTML = `<div class="detail">
-    <div class="detail-img"><img src="${p.img}" alt="${p.title}" onerror="this.style.opacity=.15" /></div>
+    <div class="detail-stage">
+      <div class="detail-stage-inner">
+        <div class="detail-stage-top">
+          <span class="stage-chip">${typeLabel(p)}</span>
+          <span class="stage-chip">${escHtml(p.college)}</span>
+          ${displayDistance(p) ? `<span class="stage-chip">${displayDistance(p)} away</span>` : ""}
+        </div>
+        <div class="detail-img"><img src="${p.img}" alt="${escHtml(p.title)}" onerror="this.style.opacity=.15" /></div>
+      </div>
+    </div>
     <div class="detail-body">
-      <p class="eyebrow">${typeLabel(p)} · ${p.college}${displayDistance(p) ? ` · ${displayDistance(p)} away` : ""}</p>
-      <h2 id="modalTitle">${p.title}</h2>
-      <div class="row-between"><span class="price" style="font-size:28px">${priceLabel(p)}</span><span class="fine">Original ${fmt(p.original)} · ${p.ageMonths} months old</span></div>
-      <span class="verdict ${v.cls}" style="margin-top:8px">${v.label}</span>
-      <p class="sub" style="margin-top:12px">${p.desc}</p>
+      <p class="eyebrow">${typeLabel(p)} · ${escHtml(p.college)}${displayDistance(p) ? ` · ${displayDistance(p)} away` : ""}</p>
+      <h2 id="modalTitle">${escHtml(p.title)}</h2>
+      <div class="detail-price">
+        <span class="price">${priceLabel(p)}</span>
+        <span class="fine">Original ${fmt(p.original)} · ${p.ageMonths} months old</span>
+      </div>
+      <span class="verdict ${v.cls}">${v.label}</span>
+      <p class="sub">${escHtml(p.desc)}</p>
       <div class="passport">
         <h3>Product Passport — condition card</h3>
         <dl>
           <div><dt>Age</dt><dd>${p.ageMonths} months</dd></div>
-          <div><dt>Condition</dt><dd>${p.condition}</dd></div>
-          <div><dt>Accessories</dt><dd>${p.accessories}</dd></div>
-          <div><dt>Repair history</dt><dd>${p.repairs}</dd></div>
-          ${p.battery ? `<div><dt>Battery health</dt><dd>${p.battery}</dd></div>` : ""}
+          <div><dt>Condition</dt><dd>${escHtml(p.condition)}</dd></div>
+          <div><dt>Accessories</dt><dd>${escHtml(p.accessories)}</dd></div>
+          <div><dt>Repair history</dt><dd>${escHtml(p.repairs)}</dd></div>
+          ${p.battery ? `<div><dt>Battery health</dt><dd>${escHtml(p.battery)}</dd></div>` : ""}
           <div><dt>Seller attestation</dt><dd>✓ Disclosed above</dd></div>
         </dl>
       </div>
       <div class="seller">
-        <span class="avatar">${p.seller[0]}</span>
-        <div><strong>${p.seller}</strong><p class="fine" style="margin:0">✓ Verified student · ${sellerRating(p)} · ${p.deals} completed deals</p></div>
+        <span class="avatar">${escHtml(p.seller.slice(0, 1))}</span>
+        <div><strong>${escHtml(p.seller)}</strong><p class="fine">✓ Verified student · ${sellerRating(p)} · ${p.deals} completed deals</p></div>
       </div>
       <div class="qr-mini">
         <canvas width="72" height="72" id="modalQr"></canvas>
-        <div><strong>SafeSwap ready</strong><p class="fine" style="margin:2px 0">Code ${code} · Meet at ${p.college} gate · Scan on handover</p></div>
+        <div><strong>SafeSwap ready</strong><p class="fine">Code ${code} · Meet at ${p.college} gate · Scan on handover</p></div>
       </div>
-      <div class="detail-actions">
-        <button class="btn btn-primary" id="modalChat">Chat with seller</button>
-        <button class="btn btn-ghost" id="modalWish">${wishlist.has(p.id) ? "Saved ✓" : "Save to wishlist"}</button>
-        <button class="btn btn-ghost" id="modalReport">Report</button>
-      </div>
-      <p class="fine" style="margin-top:12px">Safe pickup: busy campus spot, daylight. Never pay in advance. Report mismatch via Product Passport.</p>
+      ${mine ? ownerPanel(p) : buyerPanel(p)}
+      <p class="fine detail-note">Safe pickup: busy campus spot, daylight. Never pay in advance. Report mismatch via Product Passport.</p>
     </div>
   </div>`;
   openOverlay("#productOverlay");
   drawQR($("#modalQr"), code);
-  $("#modalChat").addEventListener("click", () => { closeOverlays(); openChat(p); });
-  $("#modalWish").addEventListener("click", () => {
-    wishlist.has(p.id) ? wishlist.delete(p.id) : wishlist.add(p.id);
-    updateWishlistCount(); toast(wishlist.has(p.id) ? "Saved to wishlist" : "Removed from wishlist"); closeOverlays();
-  });
-  $("#modalReport").addEventListener("click", () => { toast("Reported — our moderation team will review this listing"); closeOverlays(); });
+  $("#modalBody").dataset.listingId = p.id;
+
+  if (mine) {
+    $("#modalRemove")?.addEventListener("click", () => removeOwnListing(p));
+    $("#modalMarkSold")?.addEventListener("click", () => markOwnListingSold(p));
+    $$("[data-restore]").forEach((b) => b.addEventListener("click", () => restoreArchivedListing(b.dataset.restore)));
+  } else {
+    $("#modalChat")?.addEventListener("click", () => { closeOverlays(); openChat(p); });
+    $("#modalWish")?.addEventListener("click", () => {
+      wishlist.has(p.id) ? wishlist.delete(p.id) : wishlist.add(p.id);
+      updateWishlistCount(); toast(wishlist.has(p.id) ? "Saved to wishlist" : "Removed from wishlist"); closeOverlays();
+    });
+    $("#modalReport")?.addEventListener("click", () => { toast("Reported — our moderation team will review this listing"); closeOverlays(); });
+  }
+}
+
+/** The actions a buyer gets. */
+function buyerPanel(p) {
+  return `<div class="detail-actions">
+      <button class="btn btn-primary" id="modalChat">Chat with seller</button>
+      <button class="btn btn-ghost" id="modalWish">${wishlist.has(p.id) ? "Saved ✓" : "Save to wishlist"}</button>
+    </div>
+    <button class="link-btn" id="modalReport">Report this listing</button>`;
+}
+
+/**
+ * The actions a seller gets.
+ *
+ * A seller cannot chat with themselves, and there is nothing to report
+ * about their own item, so the buyer buttons are replaced rather than
+ * added to — two sets of buttons on one card is a card nobody reads.
+ */
+function ownerPanel(p) {
+  return `<div class="owner-panel">
+      <p class="eyebrow">Your listing</p>
+      <p class="fine">You posted this. Buyers can see it until you take it down or sell it.</p>
+      <div class="detail-actions">
+        <button class="btn btn-ghost" id="modalMarkSold">Mark as sold</button>
+        <button class="btn btn-ghost btn-danger-ghost" id="modalRemove">Remove listing</button>
+      </div>
+      ${archivedPanel()}
+    </div>`;
+}
+
+/**
+ * The seller's archived listings, and the way back.
+ *
+ * An archived listing is off the marketplace, so there is no card to
+ * click and nowhere else to undo the removal. The owner panel is the
+ * one place the seller already looks, so the way back lives here.
+ */
+function archivedPanel() {
+  if (!archivedListings.length) return "";
+  return `<div class="archived-panel">
+      <p class="eyebrow">Archived</p>
+      <p class="fine">Taken off the marketplace. Bring one back if you changed your mind.</p>
+      ${archivedListings.map((l) => `<div class="archived-row">
+        <span>${escHtml(l.title)}</span>
+        <button class="btn btn-ghost btn-sm" data-restore="${l.id}">Restore</button>
+      </div>`).join("")}
+    </div>`;
+}
+
+/** Is this listing the signed-in student's own? */
+function isMyListing(p) {
+  if (!p) return false;
+  if (p.mine) return true;
+  const uid = SB.currentUserId();
+  return Boolean(uid && p.sellerId && p.sellerId === uid);
+}
+
+/** Put an archived listing back on the marketplace. */
+async function restoreArchivedListing(id) {
+  try {
+    await SB.restoreListing(id);
+  } catch (err) {
+    console.warn("[UniHaat] restore failed:", err?.message);
+    toast("Could not bring it back — " + (err?.message || "network error"));
+    return;
+  }
+  archivedListings = archivedListings.filter((l) => l.id !== id);
+  const live = await syncListings();
+  if (live?.active?.length) await mergeLiveListings(live.active);
+  if (live?.archived) archivedListings = live.archived;
+  renderGrid();
+  toast("Listing is back on the marketplace");
+  // The panel the restore button lives in has just changed shape.
+  const openId = $("#modalBody").dataset.listingId;
+  if (openId) openProduct(openId);
+}
+
+/**
+ * Take a listing down.
+ *
+ * The row is archived rather than deleted: a completed SafeSwap handover
+ * still points at it, and a row that vanishes takes its history with it.
+ */
+async function removeOwnListing(p) {
+  const ok = await confirmAction(
+    "Remove this listing?",
+    "Buyers will stop seeing it. Your SafeSwap records, if any, stay with it.",
+    "Remove listing",
+  );
+  if (!ok) return;
+  closeOverlays();
+
+  if (signedIn && p.sellerId) {
+    try {
+      await SB.archiveListing(p.id);
+      archivedListings = [
+        { id: p.id, title: p.title, price: p.price },
+        ...archivedListings.filter((l) => l.id !== p.id),
+      ];
+    } catch (err) {
+      console.warn("[UniHaat] archive failed:", err?.message);
+      toast("Could not take it down — " + (err?.message || "network error"));
+      return;
+    }
+  }
+  products = products.filter((x) => x.id !== p.id);
+  renderGrid();
+  renderChatSection();
+  toast("Listing removed — it is no longer on the marketplace");
+}
+
+/** Mark a listing as sold, so it leaves the marketplace as a deal. */
+async function markOwnListingSold(p) {
+  const ok = await confirmAction(
+    "Mark as sold?",
+    "It comes off the marketplace as a completed deal, and stays in your history.",
+    "Mark as sold",
+  );
+  if (!ok) return;
+  closeOverlays();
+
+  if (signedIn && p.sellerId) {
+    try {
+      await SB.markListingSold(p.id);
+    } catch (err) {
+      console.warn("[UniHaat] mark sold failed:", err?.message);
+      toast("Could not update it — " + (err?.message || "network error"));
+      return;
+    }
+  }
+  products = products.filter((x) => x.id !== p.id);
+  renderGrid();
+  renderChatSection();
+  toast("Marked as sold — congratulations");
 }
 
 /* ---------- Overlays ---------- */
@@ -353,7 +570,55 @@ function closeOverlay(sel) {
 }
 $$(".overlay").forEach((o) => o.addEventListener("click", (e) => { if (e.target === o) closeOverlays(); }));
 $$("[data-close]").forEach((b) => b.addEventListener("click", closeOverlays));
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeOverlays(); $("#chatDrawer").hidden = true; } });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  // A confirmation has its own Escape: it must dismiss itself and
+  // leave whatever it was opened from alone.
+  if (!$("#confirmOverlay").hidden) return;
+  closeOverlays();
+  $("#chatDrawer").hidden = true;
+  $("#wishlistDrawer").hidden = true;
+});
+
+/**
+ * Ask before doing something that cannot be undone from the screen the
+ * student is looking at.
+ *
+ * Returns a promise that settles to true when the student says yes and
+ * false when they say no, cancel, or press Escape.
+ */
+function confirmAction(title, body, yesLabel = "Confirm") {
+  return new Promise((resolve) => {
+    const overlay = $("#confirmOverlay");
+    const yes = $("#confirmYes");
+    const no = $("#confirmNo");
+    $("#confirmTitle").textContent = title;
+    $("#confirmBody").textContent = body;
+    yes.textContent = yesLabel;
+    overlay.hidden = false;
+
+    const done = (answer) => {
+      overlay.hidden = true;
+      yes.removeEventListener("click", onYes);
+      no.removeEventListener("click", onNo);
+      overlay.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKey);
+      // The page scrolls again only when the last overlay has gone — a
+      // confirmation can sit on top of another one.
+      if (!$$(".overlay").some((o) => !o.hidden)) document.body.style.overflow = "";
+      resolve(answer);
+    };
+    const onYes = () => done(true);
+    const onNo = () => done(false);
+    const onBackdrop = (e) => { if (e.target === overlay) done(false); };
+    const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); done(false); } };
+
+    yes.addEventListener("click", onYes);
+    no.addEventListener("click", onNo);
+    overlay.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
+  });
+}
 
 /* ---------- Real-Time User-to-User Chat ---------- */
 let chatProduct = null;
@@ -362,7 +627,12 @@ let unsubscribeChat = null;
 const chatChannel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel("unihaat-chat") : null;
 
 function escHtml(s) {
-  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function getLocalThreadKey(p) {
@@ -398,7 +668,7 @@ function renderChatMessages(messages, myId) {
   }
   body.innerHTML = messages.map((m) => {
     const isMe = myId ? m.sender_id === myId : m.sender === "me";
-    return `<div class="msg ${isMe ? "me" : "them"}">${escHtml(m.body)}</div>`;
+    return `<div class="msg ${isMe ? "me" : "them"}" data-id="${escHtml(m.id)}">${escHtml(m.body)}</div>`;
   }).join("");
   body.scrollTop = body.scrollHeight;
 }
@@ -436,11 +706,9 @@ async function openChat(p) {
       const history = await SB.fetchMessages(conv.id);
       renderChatMessages(history, myId);
       unsubscribeChat = SB.subscribeToMessages(conv.id, (newMsg) => {
-        const current = $("#chatBody");
         const isMe = newMsg.sender_id === myId;
-        if (current.querySelector("p.fine")) current.innerHTML = "";
-        current.insertAdjacentHTML("beforeend", `<div class="msg ${isMe ? "me" : "them"}">${escHtml(newMsg.body)}</div>`);
-        current.scrollTop = current.scrollHeight;
+        appendChatMessage(newMsg, myId);
+        if (!isMe) { SB.markConversationRead(conv.id).then(() => loadChatInbox()); }
       });
       return;
     } catch (err) {
@@ -460,6 +728,23 @@ $("#chatClose").addEventListener("click", () => {
   }
 });
 
+/**
+ * Put one message into the open thread.
+ *
+ * The live stream can deliver the same message twice — once because the
+ * sender's own write comes back down the channel — so the message id
+ * decides whether it is already on the screen.
+ */
+function appendChatMessage(msg, myId) {
+  const current = $("#chatBody");
+  if (!current || !msg) return;
+  if (msg.id && current.querySelector(`[data-id="${msg.id}"]`)) return;
+  const isMe = myId ? msg.sender_id === myId : msg.sender === "me";
+  if (current.querySelector("p.fine")) current.innerHTML = "";
+  current.insertAdjacentHTML("beforeend", `<div class="msg ${isMe ? "me" : "them"}" data-id="${escHtml(msg.id || "")}">${escHtml(msg.body)}</div>`);
+  current.scrollTop = current.scrollHeight;
+}
+
 async function sendChat(text) {
   const clean = String(text || "").trim();
   if (!clean || !chatProduct) return;
@@ -467,8 +752,13 @@ async function sendChat(text) {
 
   if (signedIn && myId && activeConversationId && !String(activeConversationId).startsWith("conv:")) {
     try {
-      await SB.sendMessage({ conversationId: activeConversationId, body: clean });
+      const sent = await SB.sendMessage({ conversationId: activeConversationId, body: clean });
       triggerUniMailNotification("product_enquiry", { item: chatProduct.title, sender: "A verified student" });
+      // The message goes on the screen straight away. Waiting for the
+      // live stream to echo it back would leave the student staring at
+      // a thread that did not change, and a dropped connection would
+      // swallow the message altogether.
+      appendChatMessage(sent || { id: `local-${Date.now()}`, sender_id: myId, body: clean }, myId);
       return;
     } catch (err) {
       toast("Could not send message: " + (err?.message || "network error"));
@@ -488,6 +778,169 @@ async function sendChat(text) {
 }
 $("#chatForm").addEventListener("submit", (e) => { e.preventDefault(); sendChat($("#chatInput").value); $("#chatInput").value = ""; });
 $$(".chat-quick button").forEach((b) => b.addEventListener("click", () => sendChat(b.dataset.msg)));
+
+/* ---------- Chat section: the conversation list ---------- */
+let chatInbox = [];
+
+/**
+ * Load the inbox.
+ *
+ * The database returns one row per conversation with the other party,
+ * the item, the last message and the unread count already joined
+ * together, so this stays a single request however many threads exist.
+ */
+async function loadChatInbox() {
+  if (!signedIn) {
+    chatInbox = [];
+    renderChatSection();
+    return;
+  }
+  try {
+    chatInbox = await SB.fetchConversationInbox();
+  } catch (err) {
+    console.warn("[UniHaat] inbox failed:", err?.message);
+    chatInbox = [];
+  }
+  renderChatSection();
+}
+
+function renderChatSection() {
+  const list = $("#chatList");
+  const empty = $("#chatEmpty");
+  if (!list || !empty) return;
+
+  const unreadTotal = chatInbox.reduce((n, c) => n + (Number(c.unread) || 0), 0);
+  const badge = $("#chatUnread");
+  if (badge) {
+    badge.textContent = unreadTotal > 99 ? "99+" : String(unreadTotal);
+    badge.hidden = unreadTotal === 0;
+  }
+
+  if (!signedIn) {
+    list.innerHTML = "";
+    empty.hidden = false;
+    empty.innerHTML = `<h3>Sign in to see your conversations</h3>
+      <p>Your chats live with your account, so a thread you started on campus follows you to your laptop at home.</p>
+      <button class="btn btn-primary" id="chatSignIn">Sign in to chat</button>`;
+    $("#chatSignIn")?.addEventListener("click", () => $("#signInBtn")?.click());
+    return;
+  }
+
+  if (!chatInbox.length) {
+    list.innerHTML = "";
+    empty.hidden = false;
+    empty.innerHTML = `<h3>No conversations yet</h3>
+      <p>Open any listing and ask the seller a question — the thread lands here, and the reply arrives live.</p>
+      <a class="btn btn-primary" href="#marketplace">Browse the marketplace</a>`;
+    return;
+  }
+
+  empty.hidden = true;
+  list.innerHTML = chatInbox.map((c) => {
+    const unread = Number(c.unread) || 0;
+    const item = c.listing_title ? `${escHtml(c.listing_title)} · ${fmt(c.listing_price)}` : "General enquiry";
+    return `<article class="chat-row ${unread ? "unread" : ""}" data-conv="${c.id}" tabindex="0" role="button" aria-label="Conversation with ${escHtml(c.other_name)}">
+      <span class="avatar">${escHtml((c.other_name || "S").slice(0, 1))}</span>
+      <div class="chat-row-main">
+        <div class="row-between">
+          <strong>${escHtml(c.other_name || "Student")}</strong>
+          <span class="fine chat-row-time">${timeAgo(c.last_at)}</span>
+        </div>
+        <p class="fine chat-row-item">${item}</p>
+        <p class="chat-row-last">${escHtml(c.last_body || "Say hello to start")}</p>
+      </div>
+      ${unread ? `<span class="chat-unread">${unread}</span>` : ""}
+    </article>`;
+  }).join("");
+
+  $$(".chat-row", list).forEach((row) => {
+    const open = () => openConversation(row.dataset.conv);
+    row.addEventListener("click", open);
+    row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
+}
+
+/** "3m ago", "2h ago", "4d ago". */
+function timeAgo(iso) {
+  if (!iso) return "";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const mins = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+/** Open a conversation from the list in the chat drawer. */
+async function openConversation(conversationId) {
+  const row = chatInbox.find((c) => c.id === conversationId);
+  if (!row) return;
+  chatProduct = {
+    id: row.listing_id || conversationId,
+    title: row.listing_title || "Conversation",
+    seller: row.other_name || "Student",
+    college: "",
+  };
+  if (unsubscribeChat) { unsubscribeChat(); unsubscribeChat = null; }
+
+  $("#chatTitle").textContent = row.listing_title || row.other_name || "Chat";
+  $("#chatSub").textContent = `${row.other_name || "Student"} · Direct chat`;
+  $("#chatDrawer").hidden = false;
+
+  const myId = SB.currentUserId();
+  try {
+    const history = await SB.fetchMessages(conversationId);
+    renderChatMessages(history, myId);
+    await SB.markConversationRead(conversationId);
+    await loadChatInbox();
+    unsubscribeChat = SB.subscribeToMessages(conversationId, async (newMsg) => {
+      const isMe = newMsg.sender_id === myId;
+      appendChatMessage(newMsg, myId);
+      if (!isMe) { await SB.markConversationRead(conversationId); loadChatInbox(); }
+    });
+  } catch (err) {
+    console.warn("[UniHaat] could not open conversation:", err?.message);
+    toast("Could not open that conversation: " + (err?.message || "network error"));
+  }
+}
+
+/** The header chat button: go to the conversation list. */
+$("#chatBtn").addEventListener("click", () => {
+  $("#chats").scrollIntoView({ behavior: "smooth" });
+  loadChatInbox();
+});
+
+/* ---------- Live inbox ---------- */
+let unsubscribeInbox = null;
+
+/**
+ * Watch for messages that arrive while the student is on the page.
+ *
+ * Row level security decides what the stream may show, so this only
+ * ever receives messages from the student's own conversations.
+ */
+function watchForNewMessages() {
+  if (unsubscribeInbox) return;
+  unsubscribeInbox = SB.subscribeToNewMessages(async (msg) => {
+    await loadChatInbox();
+    // A message for the conversation that is open right now belongs in
+    // the drawer, not only in the list behind it.
+    if (activeConversationId && msg.conversation_id === activeConversationId) {
+      appendChatMessage(msg, SB.currentUserId());
+    }
+  });
+}
+
+function stopWatchingMessages() {
+  if (unsubscribeInbox) {
+    unsubscribeInbox();
+    unsubscribeInbox = null;
+  }
+}
 
 /* ---------- Demand Board + UniMatch ---------- */
 const STOPWORDS = new Set(["for", "a", "an", "the", "and", "with", "under", "my", "need", "want", "looking", "some", "one", "of"]);
@@ -1007,6 +1460,31 @@ initTypeReveal("[data-reveal-type]");
 initNav();
 
 /* ---------- Auth + sync ---------- */
+
+/**
+ * Put the database's listings on top of the offline catalogue.
+ *
+ * Live rows replace their local twin, then join. The title is the only
+ * part of a listing the two datasets can be matched on: the offline
+ * catalogue abbreviates the seller's name ("Aarav S.") while the
+ * database stores it in full ("Aarav Sharma").
+ */
+async function mergeLiveListings(liveListings) {
+  const sameTitle = (a, b) =>
+    String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  const merged = [...liveListings];
+  products.forEach((local) => {
+    const dupe = liveListings.find((l) => sameTitle(l.title, local.title));
+    if (!dupe) merged.push(local);
+  });
+  products = merged;
+  // Some of those photos were stored compressed. Put them back together
+  // before the grid draws them, so a card shows the picture the seller
+  // uploaded rather than a broken image.
+  await hydrateCompressedImages(products);
+  if (userLocation) products = applyDistances(products, userLocation);
+}
+
 initAuthUI({
   onAuth: async ({ event }) => {
     signedIn = SB.isSignedIn();
@@ -1022,23 +1500,11 @@ initAuthUI({
         localStorage.setItem("uh-wishlist", JSON.stringify([...wishlist]));
         updateWishlistCount();
       }
-      if (liveListings?.length) {
-        // Live rows replace their local twin, then join. The title is the
-        // only part of a listing the two datasets can be matched on: the
-        // offline catalogue abbreviates the seller's name ("Aarav S.") while
-        // the database stores it in full ("Aarav Sharma").
-        const sameTitle = (a, b) =>
-          String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-        const merged = [...liveListings];
-        products.forEach((local) => {
-          const dupe = liveListings.find((l) => sameTitle(l.title, local.title));
-          if (!dupe) merged.push(local);
-        });
-        products = merged;
-        // Some of those photos were stored compressed. Put them back
-        // together before the grid draws them, so a card shows the
-        // picture the seller uploaded rather than a broken image.
-        await hydrateCompressedImages(products);
+      if (liveListings?.active?.length) {
+        await mergeLiveListings(liveListings.active);
+      }
+      if (liveListings?.archived) {
+        archivedListings = liveListings.archived;
       }
       if (liveDemands?.length) {
         const merged = [...liveDemands];
@@ -1060,11 +1526,18 @@ initAuthUI({
       // a thing somebody can borrow, so it joins the pool.
       initReserve({ toast, listings: products });
       toast("Signed in — your listings and wishlist are in sync");
+      // The inbox is the student's own business, so it loads once there
+      // is an account to load it for.
+      loadChatInbox();
+      watchForNewMessages();
       if (!userLocation && !hasLocationPromptBeenHandled()) {
         openOverlay("#locationPrompt");
       }
     } else if (event === "SIGNED_OUT") {
       toast("Signed out");
+      chatInbox = [];
+      renderChatSection();
+      stopWatchingMessages();
     }
     // The button follows the server. While the student is signed in, the
     // database is the only thing that knows whether they are verified, so

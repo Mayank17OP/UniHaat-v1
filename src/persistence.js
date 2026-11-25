@@ -38,6 +38,11 @@ export function listingFromRow(row) {
     college: seller.colleges?.short_name ?? "Campus",
     scope: "same",
     seller: seller.full_name ?? "Student",
+    // Who the seller actually is. Without this the interface cannot tell
+    // a student's own listing from somebody else's, and two things break:
+    // there is no way to remove your own item, and a chat has nobody to
+    // address on the other side.
+    sellerId: row.seller_id ?? seller.id ?? null,
     rating,
     deals: seller.deals_completed ?? 0,
     // A compressed image is not a URL — it is a blob the browser has to
@@ -89,12 +94,22 @@ export async function syncWishlist() {
   }
 }
 
-/** Pull live listings and merge them over the local catalogue. */
+/**
+ * Pull live listings and merge them over the local catalogue.
+ *
+ * The seller's own archived rows come back in the same request — the
+ * database is asked once, not twice, and a seller who took something
+ * down needs to see it in order to change their mind.
+ */
 export async function syncListings() {
   try {
-    const rows = await SB.fetchListings();
+    const rows = await SB.fetchListings({ includeArchived: true });
     if (!rows) return null;
-    return rows.map(listingFromRow);
+    const active = rows.filter((row) => row.status !== "archived");
+    return {
+      active: active.map(listingFromRow),
+      archived: SB.archivedFromRows(rows),
+    };
   } catch (err) {
     console.warn("[UniHaat] listing sync failed", err?.message);
     return null;
