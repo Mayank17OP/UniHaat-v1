@@ -1,5 +1,12 @@
 /* UniHaat — design system
-   Taste: warm paper, editorial serif, no gradients/glass. Emil: transform+opacity only, springs. */
+   Taste: warm paper, editorial serif, no gradients/glass. Emil: transform+opacity only, springs.
+
+   Two conventions run through this sheet:
+   • Motion is transform and opacity only. A width or a height that has to
+     move is a width or a height that has to be laid out again.
+   • :hover lives inside `(hover:hover) and (pointer:fine)`. Hover is a
+     pointer refinement; on a touch screen it sticks to the last tap, and a
+     card that stays lifted reads as broken. */
 
 /* Self-hosted fonts — no third-party request, renders offline */
 @font-face{font-family:"Fraunces";src:url("../assets/fonts/fraunces-400.woff2") format("woff2");font-weight:400;font-style:normal;font-display:swap}
@@ -66,35 +73,76 @@ h3{font-size:22px;font-weight:700}
 .ticker i{color:var(--mustard);font-style:normal}
 @keyframes tick{to{transform:translateX(-33.333%)}}
 
-/* Nav */
-.nav{position:sticky;top:0;z-index:60;background:rgba(255,249,240,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
-.nav-in{display:flex;align-items:center;gap:20px;padding-top:14px;padding-bottom:14px}
+/* Nav — two tiers.
+   Tier one carries the brand and the account actions. Tier two carries the
+   nine destinations in a row of their own. Splitting the header is what
+   lets every section stay on screen: nine names plus seven controls will
+   not fit on one line, and the old answer — hiding the links behind the
+   menu button — is the thing this redesign exists to undo. */
+.nav{position:sticky;top:0;z-index:60;background:rgba(255,249,240,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);transition:box-shadow .3s var(--ease-out),background .3s var(--ease-out)}
+.nav.is-scrolled{box-shadow:0 14px 30px -26px rgba(22,18,16,.6);background:rgba(255,249,240,.97)}
+.nav-in{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-top:12px;padding-bottom:12px}
 /* The nav carries more rows than the content, so it gets its own measure */
 .nav .nav-in{max-width:1860px}
-/* Anchor targets must clear the sticky nav */
-section[id],main [id]{scroll-margin-top:92px}
+/* Anchor targets must clear the sticky nav.
+   `main[id]` is the home anchor the brand links to; without it the hero
+   would start underneath the header. */
+section[id],main[id],main [id]{scroll-margin-top:92px}
 .logo{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
 .logo-word{font-family:var(--font-d);font-weight:900;font-size:26px;letter-spacing:-.03em}
 .logo-word em{font-style:normal;color:var(--accent)}
 .logo-word.big{font-size:34px}
 .logo-tag{font-size:10px;line-height:1.2;color:var(--ink-3);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-.nav-links{display:flex;gap:18px;margin-left:auto}
-.nav-links a{text-decoration:none;font-weight:600;font-size:14px;color:var(--ink-2);position:relative;padding:6px 0}
-.nav-links a::after{content:"";position:absolute;left:0;right:100%;bottom:0;height:2px;background:var(--accent);transition:right .35s var(--ease-out)}
-.nav-links a:hover{color:var(--ink)} .nav-links a:hover::after{right:0}
 .nav-actions{display:flex;align-items:center;gap:10px}
-.icon-btn{position:relative;width:42px;height:42px;border-radius:50%;border:1px solid var(--line-2);background:#fff;display:grid;place-items:center;transition:transform .2s var(--ease-spring)}
-.icon-btn:active{transform:scale(.92)}
+.icon-btn{position:relative;width:42px;height:42px;border-radius:50%;border:1px solid var(--line-2);background:#fff;display:grid;place-items:center;transition:transform .18s var(--ease-spring)}
+.icon-btn:active{transform:scale(.97)}
 .count{position:absolute;top:-4px;right:-4px;background:var(--accent);color:#fff;font-size:11px;font-weight:800;min-width:20px;height:20px;border-radius:999px;display:grid;place-items:center;padding:0 5px}
-.avatar{width:42px;height:42px;border-radius:50%;background:var(--green);color:#fff;font-weight:800;border:2px solid #fff;box-shadow:var(--shadow);transition:transform .2s var(--ease-spring)}
-.avatar:active{transform:scale(.92)}
-.hamburger{display:none;flex-direction:column;gap:5px;background:none;border:0;padding:8px}
-.hamburger span{width:22px;height:2px;background:var(--ink);display:block}
-.mobile-menu{display:none;flex-direction:column;padding:0 24px 16px;gap:4px}
-.mobile-menu a{padding:10px 0;text-decoration:none;font-weight:600;border-top:1px solid var(--line)}
-.mobile-menu.open{display:flex}
-.mobile-actions{display:flex;gap:10px;padding-top:14px;margin-top:6px;border-top:1px solid var(--line-2)}
-.mobile-actions .btn{flex:1}
+.avatar{width:42px;height:42px;border-radius:50%;background:var(--green);color:#fff;font-weight:800;border:2px solid #fff;box-shadow:var(--shadow);transition:transform .18s var(--ease-spring)}
+.avatar:active{transform:scale(.97)}
+
+/* Tier two — the destinations.
+   The row scrolls sideways rather than pushing the page wide, so a narrow
+   window can never produce a horizontal scrollbar on the document. */
+.nav-links{border-top:1px solid var(--line);background:rgba(255,249,240,.55)}
+.nav-links-in{max-width:1860px;margin:0 auto;padding:0 24px;display:flex;align-items:stretch;gap:clamp(14px,1.5vw,26px);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none}
+.nav-links-in::-webkit-scrollbar{height:0;display:none}
+.nav-links a{position:relative;display:inline-flex;align-items:center;text-decoration:none;font-weight:600;font-size:13.5px;letter-spacing:-.01em;color:var(--ink-2);padding:13px 0 12px;white-space:nowrap;transition:color .18s var(--ease-out),transform .18s var(--ease-out)}
+/* The underline is a transform, never a width: it costs no layout and it
+   can be interrupted halfway without a jump. */
+.nav-links a::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px 2px 0 0;background:var(--accent);transform:scaleX(0);transform-origin:left center;transition:transform .25s var(--ease-out)}
+.nav-links a[aria-current="true"]{color:var(--ink)}
+.nav-links a[aria-current="true"]::after{transform:scaleX(1)}
+.nav-links a:active{transform:scale(.97)}
+/* Hover is a pointer refinement. On a touch screen it would stick to the
+   last tap, so it only exists where a real pointer can move. */
+@media (hover:hover) and (pointer:fine){
+  .nav-links a:hover{color:var(--ink)}
+  .nav-links a:hover::after{transform:scaleX(1)}
+}
+
+/* The drawer — the phone fallback. It grows out of the corner it hangs
+   from, so it reads as the menu button unfolding rather than a panel
+   appearing from nowhere. */
+.hamburger{display:none;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:none;border:0;width:42px;height:42px;border-radius:12px;transition:transform .18s var(--ease-out)}
+.hamburger span{width:22px;height:2px;border-radius:2px;background:var(--ink);display:block;transition:transform .25s var(--ease-out),opacity .18s linear}
+.hamburger[aria-expanded="true"] span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.hamburger[aria-expanded="true"] span:nth-child(2){opacity:0;transform:scaleX(.3)}
+.hamburger[aria-expanded="true"] span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+.hamburger:active{transform:scale(.97)}
+.mobile-menu{display:none;flex-direction:column;padding:0 24px 16px;gap:4px;max-height:calc(100dvh - 76px);overflow-y:auto;transform-origin:top right}
+.mobile-menu.open{display:flex;animation:menuDrop .25s var(--ease-out)}
+.mobile-menu.closing{display:flex;animation:menuLift .2s var(--ease-out) forwards}
+@keyframes menuDrop{from{opacity:0;transform:translateY(-10px) scale(.98)}}
+@keyframes menuLift{to{opacity:0;transform:translateY(-6px) scale(.99)}}
+.mobile-menu a{padding:11px 0;text-decoration:none;font-weight:600;border-top:1px solid var(--line);transition:transform .18s var(--ease-out)}
+.mobile-menu a[aria-current="true"]{color:var(--accent-dark)}
+.mobile-menu a:active{transform:scale(.985)}
+/* The drawer carries the actions a phone cannot reach from the header.
+   They wrap rather than shrink: a button whose label is clipped is worse
+   than a button on the next line. The primary action takes its own row. */
+.mobile-actions{display:flex;flex-wrap:wrap;gap:10px;padding-top:14px;margin-top:6px;border-top:1px solid var(--line-2)}
+.mobile-actions .btn{flex:1 1 140px;min-width:0}
+.mobile-actions #mSellBtn{flex:1 1 100%}
 .sell-short{display:none}
 /* Sign-in CTA: text on desktop, icon on small screens.
    The responsive overrides for these live in the nav media queries further
@@ -107,9 +155,13 @@ section[id],main [id]{scroll-margin-top:92px}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:999px;padding:11px 20px;font-weight:700;font-size:14px;border:1px solid transparent;text-decoration:none;white-space:nowrap;flex-shrink:0;transition:transform .18s var(--ease-spring),background .2s,box-shadow .2s;will-change:transform}
 .btn:active{transform:scale(.97)}
 .btn-primary{background:var(--ink);color:#FFF9F0}
-.btn-primary:hover{background:var(--accent-dark);transform:translateY(-1px);box-shadow:var(--shadow)}
+@media (hover:hover) and (pointer:fine){
+  .btn-primary:hover{background:var(--accent-dark);transform:translateY(-1px);box-shadow:var(--shadow)}
+}
 .btn-ghost{background:#fff;border-color:var(--line-2);color:var(--ink)}
-.btn-ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
+@media (hover:hover) and (pointer:fine){
+  .btn-ghost:hover{border-color:var(--ink);transform:translateY(-1px)}
+}
 .btn-block{width:100%}
 
 /* ---- Responsive nav ---------------------------------------------------
@@ -117,23 +169,31 @@ section[id],main [id]{scroll-margin-top:92px}
    specificity of their own, so an override that appears earlier in the
    sheet would lose to a plain class rule declared later. */
 /*
-   The nav names nine sections, and with the logo and the buttons on
-   either side of them it needs about 1830px of page. The numbers below
-   come from measuring the row, not from guessing: the tagline goes
-   first when the header is crowded, then the links are tightened, and
-   below 1640px they give way to the menu button. None of that is
-   allowed to push the sign-in button off the side of the page, which
-   is what an unwrapped flex row does.
+   The nav names nine sections. The old answer was to hide them behind the
+   menu button once the row got tight, which meant a desktop visitor could
+   not see the site structure at all. The numbers below come from
+   measuring the row, not from guessing.
 
-   The location toggle and the connection pill give way next, one after
-   the other, and the menu carries the location control instead.
+   Instead the header is split in two: the brand and the account actions
+   on top, the nine destinations in a row of their own underneath. Both
+   tiers are on screen from 900px up, so the section links are always
+   visible and always one click away — no hamburger, no hidden row.
+
+   Below 900px — phones and small tablets — the destinations move into
+   the drawer, which is where a phone expects them, and the action row
+   collapses to icons so the header never overflows sideways.
 */
-@media(max-width:1830px){.logo-tag{display:none}}
-@media(max-width:1830px) and (min-width:1641px){
-  .nav-links{gap:12px}
-  .nav-links a{font-size:13px}
+@media(min-width:900px){
+  .nav-links{display:block}
+  .hamburger{display:none}
+  /* Two tiers make a taller sticky header, so anchors clear more of it */
+  section[id],main[id],main [id]{scroll-margin-top:124px}
 }
-@media(max-width:1640px){.nav-links{display:none}.hamburger{display:flex}}
+@media(max-width:899px){
+  .nav-links{display:none}
+  .hamburger{display:flex}
+}
+@media(max-width:1830px){.logo-tag{display:none}}
 @media(max-width:900px){
   /* The connection pill is a decoration. It is the first thing to go. */
   #syncPill{display:none}
@@ -155,9 +215,11 @@ section[id],main [id]{scroll-margin-top:92px}
   .logo-word{font-size:19px}
   .logo{gap:7px}
   .nav-in{gap:8px}
-  .nav-actions{gap:6px}
+  .nav-actions{gap:5px}
   .icon-btn{width:38px;height:38px}
-  .hamburger{padding:6px}
+  /* The sell CTA gives up a little padding so the row keeps a margin
+     from the edge of the screen instead of touching it. */
+  #sellBtn{padding-left:16px;padding-right:16px}
 }
 @media(max-width:340px){
   /* Very narrow phones: drop the wordmark, keep the house mark */
@@ -177,7 +239,9 @@ section[id],main [id]{scroll-margin-top:92px}
 .hero-search input:focus{outline:none}
 .hero-quick{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--ink-2)}
 .hero-quick button{background:#fff;border:1px solid var(--line-2);border-radius:999px;padding:6px 12px;font-weight:600;transition:transform .18s var(--ease-spring),border-color .2s}
-.hero-quick button:hover{border-color:var(--ink);transform:translateY(-1px)}
+@media (hover:hover) and (pointer:fine){
+  .hero-quick button:hover{border-color:var(--ink);transform:translateY(-1px)}
+}
 .hero-quick button:active{transform:scale(.95)}
 .hero-stats{display:flex;flex-wrap:wrap;gap:24px 36px;margin:36px 0 0;padding:0}
 .hero-stats dt{font-family:var(--font-m);font-size:26px;font-weight:700}
@@ -214,7 +278,9 @@ section[id],main [id]{scroll-margin-top:92px}
 .cats-head a{font-weight:700;font-size:14px}
 .cats-row{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-top:16px}
 .cat-btn{background:#fff;border:1px solid var(--line);border-radius:var(--radius-sm);padding:16px 10px;text-align:center;transition:transform .2s var(--ease-spring),border-color .2s,background .2s}
-.cat-btn:hover{transform:translateY(-3px);border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){
+  .cat-btn:hover{transform:translateY(-3px);border-color:var(--ink)}
+}
 .cat-btn.active{background:var(--ink);color:#FFF9F0;border-color:var(--ink)}
 .cat-btn svg{margin:0 auto 8px}
 .cat-btn span{font-size:13px;font-weight:700;display:block}
@@ -229,14 +295,14 @@ section[id],main [id]{scroll-margin-top:92px}
 .band-dark{background:var(--ink);color:#FFF9F0}
 .section-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:28px;flex-wrap:wrap}
 .scope{display:flex;background:#fff;border:1px solid var(--line-2);border-radius:999px;padding:4px;gap:2px;flex-wrap:wrap}
-.scope-btn{border:0;background:none;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;color:var(--ink-2);transition:all .25s var(--ease-out)}
+.scope-btn{border:0;background:none;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;color:var(--ink-2);transition:color .2s var(--ease-out),background .2s var(--ease-out),transform .2s var(--ease-out)}
 .scope-btn.active{background:var(--ink);color:#FFF9F0}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
 .search-box{flex:1;min-width:220px;display:flex;align-items:center;gap:8px;border:1px solid var(--line-2);border-radius:999px;padding:0 14px;background:var(--paper)}
 .search-box input{border:0;background:none;padding:11px 0;width:100%}
 .search-box input:focus{outline:none}
 .pills{display:flex;gap:6px;flex-wrap:wrap}
-.pill{border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;transition:all .2s var(--ease-out)}
+.pill{border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:8px 14px;font-weight:700;font-size:13px;transition:color .2s var(--ease-out),background .2s var(--ease-out),border-color .2s var(--ease-out),transform .2s var(--ease-out)}
 .pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
 .select-wrap select{border:1px solid var(--line-2);border-radius:999px;padding:10px 14px;background:#fff;font-weight:600}
 /* A select is as wide as its longest option, and one of the college
@@ -252,11 +318,15 @@ section[id],main [id]{scroll-margin-top:92px}
 @media(max-width:720px){.grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:460px){.grid{grid-template-columns:1fr}}
 .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:transform .35s var(--ease-out),box-shadow .35s var(--ease-out);display:flex;flex-direction:column}
-.card:hover{transform:translateY(-5px);box-shadow:var(--shadow-lg)}
+@media (hover:hover) and (pointer:fine){
+  .card:hover{transform:translateY(-5px);box-shadow:var(--shadow-lg)}
+}
 .card:active{transform:scale(.99)}
 .card-img{position:relative;aspect-ratio:4/3;background:var(--paper-2);overflow:hidden}
 .card-img img{width:100%;height:100%;object-fit:contain;padding:14px;transition:transform .6s var(--ease-out)}
-.card:hover .card-img img{transform:scale(1.06)}
+@media (hover:hover) and (pointer:fine){
+  .card:hover .card-img img{transform:scale(1.06)}
+}
 .type-badge{position:absolute;top:10px;left:10px;background:var(--ink);color:#FFF9F0;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:5px 10px}
 .type-badge.free{background:var(--green)} .type-badge.rent{background:var(--mustard);color:var(--ink)} .type-badge.exchange{background:#fff;color:var(--ink);border:1px solid var(--line-2)}
 .heart{position:absolute;top:10px;right:10px;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:#fff;display:grid;place-items:center;transition:transform .2s var(--ease-spring)}
@@ -297,7 +367,9 @@ section[id],main [id]{scroll-margin-top:92px}
 .clearance-row{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
 @media(max-width:900px){.clearance-row{grid-template-columns:1fr}}
 .clear-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:transform .35s var(--ease-out),box-shadow .35s}
-.clear-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+@media (hover:hover) and (pointer:fine){
+  .clear-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}
+}
 .clear-card img{height:180px;width:100%;object-fit:contain;padding:12px;background:var(--paper-2)}
 .clear-body{padding:16px}
 .clear-items{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
@@ -354,7 +426,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .footer-grid{display:grid;grid-template-columns:1.2fr 1fr 1.2fr;gap:32px}
 .footer nav{display:flex;flex-direction:column;gap:8px}
 .footer a{text-decoration:none;color:#D8CFC2}
-.footer a:hover{color:#fff}
+@media (hover:hover) and (pointer:fine){
+  .footer a:hover{color:#fff}
+}
 .footer p{color:#B9AC9C}
 @media(max-width:800px){.footer-grid{grid-template-columns:1fr}}
 
@@ -386,7 +460,7 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:130;display:flex;flex-direction:column;gap:8px;align-items:center;width:min(92vw,480px)}
 .toast{background:var(--ink);color:#FFF9F0;border-radius:999px;padding:12px 20px;font-weight:700;font-size:14px;box-shadow:var(--shadow-lg);animation:toastIn .4s var(--ease-spring);text-align:center}
 @keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.95)}}
-.toast.out{opacity:0;transform:translateY(8px);transition:all .3s var(--ease-out)}
+.toast.out{opacity:0;transform:translateY(8px);transition:opacity .2s var(--ease-out),transform .2s var(--ease-out)}
 
 /* Product detail */
 .detail{display:grid;grid-template-columns:1.05fr .95fr}
@@ -421,9 +495,11 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .auth-tabs{position:relative;display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--line);margin-bottom:4px}
 .auth-tab{background:none;border:0;padding:12px 4px;font-weight:700;font-size:15px;color:var(--ink-3);position:relative;transition:color .25s var(--ease-out)}
 .auth-tab.active{color:var(--ink)}
-.auth-tab-ink{position:absolute;bottom:-1px;left:0;height:2px;width:0;background:var(--accent);border-radius:2px;transition:transform .45s var(--ease-spring),width .45s var(--ease-spring)}
+.auth-tab-ink{position:absolute;bottom:-1px;left:0;height:2px;width:100%;background:var(--accent);border-radius:2px;transform:scaleX(0);transform-origin:left center;transition:transform .25s var(--ease-out)}
 .google-btn{width:100%;background:#fff;border:1px solid var(--line-2);color:var(--ink);padding:12px 18px;gap:11px}
-.google-btn:hover{border-color:var(--ink);box-shadow:var(--shadow)}
+@media (hover:hover) and (pointer:fine){
+  .google-btn:hover{border-color:var(--ink);box-shadow:var(--shadow)}
+}
 .google-btn svg{flex-shrink:0}
 .google-btn:disabled{opacity:.6}
 .auth-divider{display:flex;align-items:center;gap:12px;color:var(--ink-3);font-size:12px;font-weight:600}
@@ -444,8 +520,8 @@ input[type=range]{accent-color:var(--accent);width:100%}
 }
 
 /* Profile menu */
-.profile-menu{position:absolute;top:calc(100% + 10px);right:24px;width:264px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:14px;z-index:80;animation:menuIn .32s var(--ease-spring)}
-@keyframes menuIn{from{opacity:0;transform:translateY(-8px) scale(.97)}}
+.profile-menu{position:absolute;top:calc(100% + 10px);right:24px;width:264px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:14px;z-index:80;transform-origin:top right;animation:menuIn .22s var(--ease-out)}
+@keyframes menuIn{from{opacity:0;transform:translateY(-8px) scale(.98)}}
 .profile-head{display:flex;gap:11px;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .profile-head .avatar{width:40px;height:40px;font-size:15px}
 .profile-head strong{display:block;font-size:15px}
@@ -454,7 +530,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .profile-stats strong{display:block;font-family:var(--font-m);font-size:17px;font-weight:700}
 .profile-stats span{font-size:11px;color:var(--ink-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 .profile-item{display:block;width:100%;text-align:left;background:none;border:0;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:600;transition:background .18s,transform .18s var(--ease-spring)}
-.profile-item:hover{background:var(--paper-2)}
+@media (hover:hover) and (pointer:fine){
+  .profile-item:hover{background:var(--paper-2)}
+}
 .profile-item:active{transform:scale(.98)}
 .profile-item.danger{color:var(--accent-dark)}
 .profile-item:disabled{opacity:.5;cursor:default}
@@ -484,7 +562,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 /* Card depth: a whisper of tilt + a cursor-following glow */
 .card{transform-style:preserve-3d;transform:perspective(900px) rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg));transition:transform .35s var(--ease-out),box-shadow .35s var(--ease-out)}
 .card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .35s var(--ease-out);background:radial-gradient(420px circle at var(--glow-x,50%) var(--glow-y,50%),rgba(255,184,28,.16),transparent 62%)}
-.card:hover::after{opacity:1}
+@media (hover:hover) and (pointer:fine){
+  .card:hover::after{opacity:1}
+}
 
 /* Heart pop + particles */
 .heart{position:relative;transition:transform .2s var(--ease-spring),background .2s,border-color .2s}
@@ -492,7 +572,7 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .heart.pop{animation:heartPop .55s var(--ease-spring)}
 @keyframes heartPop{0%{transform:scale(1)}28%{transform:scale(1.35)}52%{transform:scale(.92)}74%{transform:scale(1.1)}100%{transform:scale(1)}}
 .heart-spark{position:fixed;width:6px;height:6px;border-radius:50%;pointer-events:none;z-index:140;animation:spark .6s var(--ease-out) forwards}
-@keyframes spark{from{transform:translate(-50%,-50%) scale(1);opacity:1}to{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(0);opacity:0}}
+@keyframes spark{from{transform:translate(-50%,-50%) scale(1);opacity:1}to{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.4);opacity:0}}
 
 /* Live chip */
 .live-chip{position:absolute;top:10px;left:10px;display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--green)}
@@ -597,7 +677,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 .reserve-item p{margin:4px 0 0}
 .reserve-item .row-gap{margin-top:10px}
 .reserve-item .btn-ghost{background:transparent;border-color:#4A4036;color:#D8CFC2}
-.reserve-item .btn-ghost:hover{border-color:var(--mustard);color:#FFF9F0}
+@media (hover:hover) and (pointer:fine){
+  .reserve-item .btn-ghost:hover{border-color:var(--mustard);color:#FFF9F0}
+}
 .reserve-approved{border-left:3px solid #2E5C41}
 .reserve-pending{border-left:3px solid var(--mustard)}
 .reserve-blocked{border-left:3px solid var(--accent)}
@@ -663,7 +745,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 
 .location-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:14px 2px 0}
 .location-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:9px 16px;font-weight:700;font-size:13px;color:var(--ink);transition:transform .18s var(--ease-spring),border-color .2s,background .2s}
-.location-chip:hover{border-color:var(--ink);transform:translateY(-1px)}
+@media (hover:hover) and (pointer:fine){
+  .location-chip:hover{border-color:var(--ink);transform:translateY(-1px)}
+}
 .location-chip:active{transform:scale(.97)}
 .location-chip.set{background:var(--green-soft);border-color:var(--green);color:var(--green)}
 .location-chip.set svg{color:var(--green)}
@@ -684,7 +768,9 @@ input[type=range]{accent-color:var(--accent);width:100%}
 /* Header location button — visible before login/signup */
 .header-loc-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-2);background:#fff;border-radius:999px;padding:7px 13px;font-weight:700;font-size:13px;color:var(--ink);white-space:nowrap;max-width:190px;transition:transform .18s var(--ease-spring),border-color .2s,background .2s}
 .header-loc-btn span{overflow:hidden;text-overflow:ellipsis}
-.header-loc-btn:hover{border-color:var(--ink);transform:translateY(-1px)}
+@media (hover:hover) and (pointer:fine){
+  .header-loc-btn:hover{border-color:var(--ink);transform:translateY(-1px)}
+}
 .header-loc-btn:active{transform:scale(.97)}
 .header-loc-btn.set{background:var(--green-soft);border-color:var(--green);color:var(--green)}
 .header-loc-btn.set svg{color:var(--green)}

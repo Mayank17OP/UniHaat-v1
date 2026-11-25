@@ -178,14 +178,19 @@ function setAuthMode(mode) {
  * This is only the ink — it must not touch the error message. The ink is
  * positioned again when the web fonts finish loading, and a refused Google
  * sign-in must not have its message wiped by that.
+ *
+ * The ink is a transform, not a width: it spans the tab bar and is scaled
+ * down to the active tab, so moving between tabs animates on the
+ * compositor and costs no layout.
  */
 function positionTabInk() {
   const active = $(`.auth-tab[data-authtab="${authMode}"]`);
   const ink = $("#authTabInk");
-  if (active && ink) {
-    ink.style.width = active.offsetWidth + "px";
-    ink.style.transform = `translateX(${active.offsetLeft}px)`;
-  }
+  if (!active || !ink) return;
+  const bar = ink.parentElement;
+  const barWidth = bar?.offsetWidth || 0;
+  const scale = barWidth ? active.offsetWidth / barWidth : 0;
+  ink.style.transform = `translateX(${active.offsetLeft}px) scaleX(${scale})`;
 }
 
 /* ------------------------------------------------------------------- render */
